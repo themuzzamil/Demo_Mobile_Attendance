@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
+import DashboardLayout from '@/app/components/DashboardLayout';
 import PendingScreen from '@/app/components/PendingScreen';
 import MessagesInbox from '@/app/components/MessagesInbox';
 import Countdown from '@/app/components/Countdown';
@@ -76,18 +77,16 @@ function TeacherHome({ user }) {
   }
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
-  const Tab = ({ id, label, count }) => (
-    <button className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-      {label}{count > 0 && <span className="count">{count}</span>}
-    </button>
-  );
+  const nav = [
+    { id: 'today', label: "Today's classes", icon: 'play' },
+    { id: 'requests', label: 'Late requests', icon: 'bell', count: pendingRequests.length },
+    { id: 'students', label: 'Students', icon: 'approvals', count: pending.length },
+    { id: 'records', label: 'Records', icon: 'records' },
+    { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
+  ];
 
   return (
-    <div>
-      <div className="row between">
-        <h2>Teacher Dashboard</h2>
-        <div className="small muted">Subject: <strong>{user.subject}</strong></div>
-      </div>
+    <DashboardLayout user={user} title="Teacher" subtitle={user.subject} nav={nav} active={tab} onNavigate={setTab}>
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert ok">{msg}</div>}
 
@@ -95,14 +94,6 @@ function TeacherHome({ user }) {
         <ActiveSession session={session} busy={busy} setBusy={setBusy}
           onClosed={() => { loadSession(); loadToday(); loadRecords(); }} flash={flash} fail={fail} />
       )}
-
-      <div className="tabnav">
-        <Tab id="today" label="Today's classes" />
-        <Tab id="requests" label="Late requests" count={pendingRequests.length} />
-        <Tab id="students" label="Students" count={pending.length} />
-        <Tab id="records" label="Records" />
-        <Tab id="inbox" label="Inbox" count={unread} />
-      </div>
 
       {tab === 'today' && (
         <div className="card">
@@ -203,7 +194,7 @@ function TeacherHome({ user }) {
       )}
 
       {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
-    </div>
+    </DashboardLayout>
   );
 }
 

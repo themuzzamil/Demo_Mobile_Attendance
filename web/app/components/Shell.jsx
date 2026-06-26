@@ -35,28 +35,8 @@ export default function Shell({ role, children }) {
     });
   }, [role, router]);
 
-  function logout() {
-    clearSession();
-    router.replace('/login');
-  }
-
   if (!ready || !user) return null;
 
-  return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="brand">Attend<span>Net</span></div>
-        <div className="who">
-          <div className="name">{user.name}</div>
-          <div>
-            <span className="badge role">{user.role}</span>
-          </div>
-        </div>
-        <button className="ghost sm" onClick={logout} style={{ color: '#cbd5e1' }}>
-          Sign out
-        </button>
-      </header>
-      <main className="content">{children(user, setUser)}</main>
-    </div>
-  );
+  // Auth guard only — page chrome (sidebar/header) is provided by DashboardLayout.
+  return children(user, setUser);
 }

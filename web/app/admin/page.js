@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
+import DashboardLayout from '@/app/components/DashboardLayout';
 import MessagesInbox from '@/app/components/MessagesInbox';
 import { api } from '@/lib/clientApi';
 
@@ -54,28 +55,21 @@ function AdminHome({ user }) {
     try { await api.post(`/permissions/${id}`, { decision }); await loadRequests(); flash(`Request ${decision}d.`); } catch (e) { fail(e); }
   }
 
-  const Tab = ({ id, label, count }) => (
-    <button className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-      {label}{count > 0 && <span className="count">{count}</span>}
-    </button>
-  );
+  const nav = [
+    { id: 'overview', label: 'Overview', icon: 'overview' },
+    { id: 'approvals', label: 'Approvals', icon: 'approvals', count: pending.length },
+    { id: 'courses', label: 'Courses', icon: 'course' },
+    { id: 'offerings', label: 'Offerings', icon: 'offering' },
+    { id: 'timetable', label: 'Timetable', icon: 'timetable' },
+    { id: 'requests', label: 'Requests', icon: 'bell', count: pendingRequests.length },
+    { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
+    { id: 'users', label: 'Users', icon: 'users' },
+  ];
 
   return (
-    <div>
-      <h2>Admin Dashboard</h2>
+    <DashboardLayout user={user} title="Admin" subtitle="Control center" nav={nav} active={tab} onNavigate={setTab}>
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert ok">{msg}</div>}
-
-      <div className="tabnav">
-        <Tab id="overview" label="Overview" />
-        <Tab id="approvals" label="Approvals" count={pending.length} />
-        <Tab id="courses" label="Courses" />
-        <Tab id="offerings" label="Offerings" />
-        <Tab id="timetable" label="Timetable" />
-        <Tab id="requests" label="Requests" count={pendingRequests.length} />
-        <Tab id="inbox" label="Inbox" count={unread} />
-        <Tab id="users" label="Users" />
-      </div>
 
       {tab === 'overview' && <Overview overview={overview} />}
       {tab === 'approvals' && <Approvals pending={pending} onDecide={decideUser} />}
@@ -88,7 +82,7 @@ function AdminHome({ user }) {
       {tab === 'requests' && <Requests requests={requests} onDecide={decideRequest} />}
       {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
       {tab === 'users' && <Users users={users} meId={user.id} onRemove={removeUser} />}
-    </div>
+    </DashboardLayout>
   );
 }
 
