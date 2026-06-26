@@ -19,6 +19,22 @@ teacher's network is detected live when they open an attendance session.
 > after first login** (or delete this account) before using the deployment for
 > anything real. The admin can approve teachers; teachers approve students.
 
+### Seeded test accounts (demo data)
+The DB is pre-seeded (`npm run seed`) with courses, offerings, enrolments, a weekly
+timetable, and past sessions so attendance %s are populated. **Password for all
+seeded accounts: `Passw0rd!`**
+
+| Role | Logins |
+|------|--------|
+| Teacher | `imran.khan@seed.attendnet`, `sara.ahmed@seed.attendnet`, `bilal.malik@seed.attendnet` |
+| Student | `student1@seed.attendnet` … `student10@seed.attendnet` |
+
+- **CS-305 (Mobile Computing)** has a class scheduled **live now** — log in as the
+  assigned teacher, open *Today's classes → Start class*, then mark attendance as an
+  enrolled student to see the full flow.
+- **CS-301** has 6 past sessions, so its students show a real attendance %.
+- Re-run `npm run seed` any time to reset the demo data (real accounts are kept).
+
 ## Components
 
 | Folder         | What it is                                  | Stack                    |
