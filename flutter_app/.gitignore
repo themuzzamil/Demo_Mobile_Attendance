@@ -1,0 +1,19 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# Generated platform folders (recreate with `flutter create .`)
+android/
+ios/
+web/
+windows/
+macos/
+linux/
+
+# IDE
+.idea/
+*.iml
