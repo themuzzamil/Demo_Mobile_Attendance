@@ -38,18 +38,30 @@ Full details: [`web/README.md`](web/README.md).
 ## Roles & approval chain
 - **Admin** (name, email, password) — self-approved. Approves teachers.
 - **Teacher** (name, email, password, subject) — approved by admin. Approves
-  students of their subject; opens/closes attendance sessions.
+  students of their subject; starts/closes scheduled classes; approves student
+  late-mark requests.
 - **Student** (name, email, password, subject, semester, section, roll no) —
   approved by a teacher of their subject. Marks attendance.
 
 Login is by **email + password** for all roles.
 
 ## How attendance works
-1. Teacher **opens a session** → their live **public IP** is captured as the
-   reference network.
-2. Student **marks present** → their public IP is sent and compared.
-3. **Same IP → present**, different → **denied**. Every attempt is recorded with
-   the IP and written to the audit log; teachers/admins export CSV/PDF reports.
+1. **Admin** builds the **weekly timetable**: subject + teacher + section, with a
+   scheduled start time, **lecture duration**, **marking window** and **teacher
+   start grace** (minutes) per slot, and enrolls students into the class roster.
+2. **Teacher** sees today's classes and **starts the class** at its scheduled time
+   (this also marks the teacher present). Their live **public IP** is captured as
+   the reference network. Starting after the grace period needs **admin permission**.
+3. **Student** **marks present** within the marking window → their public IP is
+   compared. **Same IP → present**, different → **denied**. After the window
+   closes they must **request the teacher's permission**, which (once approved)
+   lets them mark and counts as present.
+4. At lecture end, enrolled non-markers are **auto-marked absent**. Teachers may
+   end an **empty** session early (10+ min in) by **messaging the admin**.
+
+All window/timing checks are enforced **server-side in UTC**. Every action is
+audited; the admin has full oversight (logs, attendees, per-teacher headcounts).
+Full design in [`SPEC.md`](SPEC.md).
 
 ## Information Security features
 - **Authentication** — JWT + bcrypt, email/password
