@@ -112,7 +112,7 @@ function TeacherHome({ user }) {
             <div className="slot-grid">
               {today.map((s) => (
                 <div className="slot" key={s.slot_id}>
-                  <div className="when">{String(s.start_time).slice(0, 5)} PKT · {s.subject}{s.section ? ` · ${s.section}` : ''}</div>
+                  <div className="when">{String(s.start_time).slice(0, 5)} PKT · <span className="mono">{s.code}</span> {s.title}{s.section ? ` · ${s.section}` : ''}</div>
                   <div className="meta">{s.duration_minutes}m lecture · mark {s.mark_window_minutes}m · grace {s.start_grace_minutes}m</div>
                   {s.open_session ? (
                     <span className="badge approved">In progress</span>

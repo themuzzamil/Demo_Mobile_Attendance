@@ -26,15 +26,16 @@ export async function GET(request) {
     return NextResponse.json({ session: rows[0] || null });
   }
 
-  // student
+  // student — open session for a course they're enrolled in
   const { rows } = await query(
     `SELECT s.id, s.subject, s.semester, s.section, s.opened_at,
             s.attendance_until, s.ends_at, u.name AS teacher_name
        FROM attendance_sessions s
+       JOIN enrollments e ON e.offering_id = s.offering_id AND e.student_id = $1
        JOIN users u ON u.id = s.teacher_id
-      WHERE s.is_open = TRUE AND s.subject = $1
+      WHERE s.is_open = TRUE
       ORDER BY s.opened_at DESC LIMIT 1`,
-    [user.subject]
+    [user.id]
   );
   const session = rows[0] || null;
   let alreadyMarked = null;

@@ -14,7 +14,8 @@ export async function GET(request) {
     `SELECT
        (SELECT COUNT(*) FROM users WHERE role='teacher' AND status='approved') AS teachers,
        (SELECT COUNT(*) FROM users WHERE role='student' AND status='approved') AS students,
-       (SELECT COUNT(*) FROM classes WHERE active) AS classes,
+       (SELECT COUNT(*) FROM courses) AS courses,
+       (SELECT COUNT(*) FROM course_offerings WHERE active) AS offerings,
        (SELECT COUNT(*) FROM attendance_sessions WHERE is_open) AS open_sessions,
        (SELECT COUNT(*) FROM permission_requests WHERE status='pending') AS pending_requests`
   );
@@ -22,7 +23,7 @@ export async function GET(request) {
   // Per-teacher rollup: how many classes, sessions run, and total student presents.
   const perTeacher = await query(
     `SELECT u.id, u.name, u.email,
-            (SELECT COUNT(*) FROM classes c WHERE c.teacher_id = u.id AND c.active) AS classes,
+            (SELECT COUNT(*) FROM course_offerings o WHERE o.teacher_id = u.id AND o.active) AS offerings,
             (SELECT COUNT(*) FROM attendance_sessions s WHERE s.teacher_id = u.id) AS sessions_run,
             (SELECT COUNT(*) FROM attendance a
                JOIN attendance_sessions s ON s.id = a.session_id

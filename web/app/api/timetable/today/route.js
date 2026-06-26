@@ -15,8 +15,10 @@ export async function GET(request) {
   const now = new Date();
   const dow = dayOfWeek(now);
   const { rows: slots } = await query(
-    `SELECT t.*, c.subject, c.semester, c.section
-       FROM timetable_slots t JOIN classes c ON c.id = t.class_id
+    `SELECT t.*, c.code, c.title, o.section, o.semester, o.term
+       FROM timetable_slots t
+       JOIN course_offerings o ON o.id = t.offering_id
+       JOIN courses c ON c.id = o.course_id
       WHERE t.active = TRUE AND t.teacher_id = $1 AND t.day_of_week = $2
       ORDER BY t.start_time`,
     [user.id, dow]
@@ -43,9 +45,13 @@ export async function GET(request) {
 
     out.push({
       slot_id: slot.id,
-      subject: slot.subject,
+      offering_id: slot.offering_id,
+      code: slot.code,
+      title: slot.title,
+      subject: slot.title,
       semester: slot.semester,
       section: slot.section,
+      term: slot.term,
       day_name: dayName(slot.day_of_week),
       start_time: slot.start_time,
       duration_minutes: slot.duration_minutes,

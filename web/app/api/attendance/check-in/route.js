@@ -21,16 +21,18 @@ export async function POST(request) {
   const studentIp = effectiveIp(b.network_ip, request);
   const serverIp = getServerSeenIp(request);
 
+  // Find an open session for a course this student is enrolled in.
   const { rows } = await query(
-    `SELECT * FROM attendance_sessions
-      WHERE is_open = TRUE AND subject = $1
-      ORDER BY opened_at DESC LIMIT 1`,
-    [user.subject]
+    `SELECT s.* FROM attendance_sessions s
+       JOIN enrollments e ON e.offering_id = s.offering_id AND e.student_id = $1
+      WHERE s.is_open = TRUE
+      ORDER BY s.opened_at DESC LIMIT 1`,
+    [user.id]
   );
   const session = rows[0];
   if (!session) {
     return NextResponse.json(
-      { error: 'No open attendance session for your subject right now.' },
+      { error: 'No open attendance session for your enrolled courses right now.' },
       { status: 404 }
     );
   }

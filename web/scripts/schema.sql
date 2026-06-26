@@ -74,35 +74,48 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
 -- (run `npm run migrate`, no --reset needed) without wiping users/data.
 -- ============================================================================
 
--- A teachable unit: the roster anchor (subject for a specific semester/section).
-CREATE TABLE IF NOT EXISTS classes (
+-- v4 — course catalog: a subject with a code, defined once.
+CREATE TABLE IF NOT EXISTS courses (
+  id           SERIAL PRIMARY KEY,
+  code         TEXT NOT NULL UNIQUE,        -- e.g. "CS-301"
+  title        TEXT NOT NULL,               -- e.g. "Information Security"
+  credit_hours INTEGER,
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- admin
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Course offering (section): one teacher teaching a course to a section in a term.
+CREATE TABLE IF NOT EXISTS course_offerings (
   id          SERIAL PRIMARY KEY,
-  subject     TEXT NOT NULL,
+  course_id   INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  teacher_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  term        TEXT NOT NULL,                -- e.g. "Fall 2026"
   semester    TEXT,
   section     TEXT,
-  teacher_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- admin
   active      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- admin
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (subject, semester, section)
+  UNIQUE (course_id, section, term)
 );
-CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_offerings_teacher ON course_offerings(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_offerings_course ON course_offerings(course_id);
 
--- Which students belong to which class (the expected set for "absent").
+-- Which students are enrolled in an offering (the expected set for "absent").
 CREATE TABLE IF NOT EXISTS enrollments (
   id          SERIAL PRIMARY KEY,
-  class_id    INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  offering_id INTEGER NOT NULL REFERENCES course_offerings(id) ON DELETE CASCADE,
   student_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (class_id, student_id)
+  UNIQUE (offering_id, student_id)
 );
-CREATE INDEX IF NOT EXISTS idx_enrollments_class ON enrollments(class_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_offering ON enrollments(offering_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id);
 
--- The weekly schedule. Admin sets duration + windows per slot.
+-- Weekly meeting times for an offering. teacher_id is denormalized from the
+-- offering for fast "my classes" lookups. Admin sets duration + windows per slot.
 CREATE TABLE IF NOT EXISTS timetable_slots (
   id                  SERIAL PRIMARY KEY,
-  class_id            INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  offering_id         INTEGER NOT NULL REFERENCES course_offerings(id) ON DELETE CASCADE,
   teacher_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   day_of_week         SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),  -- 0=Mon..6=Sun
   start_time          TIME NOT NULL,
@@ -114,7 +127,7 @@ CREATE TABLE IF NOT EXISTS timetable_slots (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_slots_teacher_day ON timetable_slots(teacher_id, day_of_week);
-CREATE INDEX IF NOT EXISTS idx_slots_class ON timetable_slots(class_id);
+CREATE INDEX IF NOT EXISTS idx_slots_offering ON timetable_slots(offering_id);
 
 -- Escalation requests: teacher->admin (late start), student->teacher (late mark).
 CREATE TABLE IF NOT EXISTS permission_requests (
@@ -153,6 +166,7 @@ ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS attendance_until TIMEST
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS teacher_status TEXT;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS ended_reason TEXT;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS offering_id INTEGER REFERENCES course_offerings(id) ON DELETE SET NULL;
 
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendee_role TEXT NOT NULL DEFAULT 'student';
 -- Widen the status CHECK to allow 'late' and 'absent' on already-existing DBs.

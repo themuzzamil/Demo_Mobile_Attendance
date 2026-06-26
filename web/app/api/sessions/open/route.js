@@ -25,8 +25,10 @@ export async function POST(request) {
   if (!slotId) return NextResponse.json({ error: 'slot_id is required' }, { status: 400 });
 
   const slotRes = await query(
-    `SELECT t.*, c.subject, c.semester, c.section
-       FROM timetable_slots t JOIN classes c ON c.id = t.class_id
+    `SELECT t.*, c.code, c.title, (c.code || ' — ' || c.title) AS subject, o.section, o.semester, o.id AS offering_id
+       FROM timetable_slots t
+       JOIN course_offerings o ON o.id = t.offering_id
+       JOIN courses c ON c.id = o.course_id
       WHERE t.id = $1 AND t.active = TRUE`,
     [slotId]
   );
@@ -88,10 +90,10 @@ export async function POST(request) {
   const { rows } = await query(
     `INSERT INTO attendance_sessions
        (teacher_id, subject, semester, section, network_ip, server_ip,
-        slot_id, scheduled_start, attendance_until, ends_at, teacher_status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        slot_id, offering_id, scheduled_start, attendance_until, ends_at, teacher_status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [user.id, slot.subject, slot.semester, slot.section, networkIp, getServerSeenIp(request),
-     slotId, scheduledStart, until, endsAt, teacherStatus]
+     slotId, slot.offering_id, scheduledStart, until, endsAt, teacherStatus]
   );
   const session = rows[0];
 

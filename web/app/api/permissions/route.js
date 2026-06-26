@@ -16,11 +16,13 @@ export async function GET(request) {
   let rows;
   if (user.role === 'admin') {
     ({ rows } = await query(
-      `SELECT pr.*, u.name AS requester_name, c.subject, t.start_time, t.day_of_week
+      `SELECT pr.*, u.name AS requester_name,
+              (crs.code || ' — ' || crs.title) AS subject, t.start_time, t.day_of_week
          FROM permission_requests pr
          JOIN users u ON u.id = pr.requester_id
          LEFT JOIN timetable_slots t ON t.id = pr.slot_id
-         LEFT JOIN classes c ON c.id = t.class_id
+         LEFT JOIN course_offerings o ON o.id = t.offering_id
+         LEFT JOIN courses crs ON crs.id = o.course_id
         WHERE pr.type = 'teacher_late_start'
         ORDER BY pr.status = 'pending' DESC, pr.created_at DESC LIMIT 100`
     ));
@@ -86,7 +88,11 @@ export async function POST(request) {
     const slotId = Number(b.slot_id);
     if (!slotId) return NextResponse.json({ error: 'slot_id is required' }, { status: 400 });
     const slotRes = await query(
-      `SELECT t.*, c.subject FROM timetable_slots t JOIN classes c ON c.id = t.class_id WHERE t.id = $1`,
+      `SELECT t.*, (c.code || ' — ' || c.title) AS subject
+         FROM timetable_slots t
+         JOIN course_offerings o ON o.id = t.offering_id
+         JOIN courses c ON c.id = o.course_id
+        WHERE t.id = $1`,
       [slotId]
     );
     const slot = slotRes.rows[0];
