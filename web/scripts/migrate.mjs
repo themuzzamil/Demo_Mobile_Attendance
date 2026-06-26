@@ -14,8 +14,11 @@ const pool = new pg.Pool({
 
 // Drop old/changed tables so the schema rebuilds cleanly (this wipes data).
 const DROP = `
+  DROP TABLE IF EXISTS messages CASCADE;
+  DROP TABLE IF EXISTS permission_requests CASCADE;
   DROP TABLE IF EXISTS attendance CASCADE;
   DROP TABLE IF EXISTS attendance_sessions CASCADE;
+  DROP TABLE IF EXISTS timetable_slots CASCADE;
   DROP TABLE IF EXISTS enrollments CASCADE;
   DROP TABLE IF EXISTS classes CASCADE;
   DROP TABLE IF EXISTS audit_logs CASCADE;

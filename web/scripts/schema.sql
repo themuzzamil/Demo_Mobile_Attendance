@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS attendance (
   id          SERIAL PRIMARY KEY,
   session_id  INTEGER NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
   student_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status      TEXT NOT NULL CHECK (status IN ('present', 'denied')),
+  status      TEXT NOT NULL CHECK (status IN ('present', 'denied', 'late', 'absent')),
+  attendee_role TEXT NOT NULL DEFAULT 'student' CHECK (attendee_role IN ('student', 'teacher')),
   ip_address  TEXT,                   -- student's detected public IP (used for match)
   server_ip   TEXT,                   -- server-seen IP (audit)
   ip_ok       BOOLEAN,
@@ -66,3 +67,95 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+
+-- ============================================================================
+-- v3: roster, timetable, escalation/permission workflow, in-site messaging.
+-- Everything below is additive + idempotent so it migrates an existing DB
+-- (run `npm run migrate`, no --reset needed) without wiping users/data.
+-- ============================================================================
+
+-- A teachable unit: the roster anchor (subject for a specific semester/section).
+CREATE TABLE IF NOT EXISTS classes (
+  id          SERIAL PRIMARY KEY,
+  subject     TEXT NOT NULL,
+  semester    TEXT,
+  section     TEXT,
+  teacher_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- admin
+  active      BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (subject, semester, section)
+);
+CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
+
+-- Which students belong to which class (the expected set for "absent").
+CREATE TABLE IF NOT EXISTS enrollments (
+  id          SERIAL PRIMARY KEY,
+  class_id    INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  student_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (class_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_enrollments_class ON enrollments(class_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_student ON enrollments(student_id);
+
+-- The weekly schedule. Admin sets duration + windows per slot.
+CREATE TABLE IF NOT EXISTS timetable_slots (
+  id                  SERIAL PRIMARY KEY,
+  class_id            INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  teacher_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day_of_week         SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),  -- 0=Mon..6=Sun
+  start_time          TIME NOT NULL,
+  duration_minutes    INTEGER NOT NULL DEFAULT 60,
+  mark_window_minutes INTEGER NOT NULL DEFAULT 15,   -- student marking window W
+  start_grace_minutes INTEGER NOT NULL DEFAULT 15,   -- teacher start grace G
+  created_by          INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- admin
+  active              BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_slots_teacher_day ON timetable_slots(teacher_id, day_of_week);
+CREATE INDEX IF NOT EXISTS idx_slots_class ON timetable_slots(class_id);
+
+-- Escalation requests: teacher->admin (late start), student->teacher (late mark).
+CREATE TABLE IF NOT EXISTS permission_requests (
+  id           SERIAL PRIMARY KEY,
+  type         TEXT NOT NULL CHECK (type IN ('teacher_late_start', 'student_late_mark')),
+  requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  slot_id      INTEGER REFERENCES timetable_slots(id) ON DELETE SET NULL,
+  session_id   INTEGER REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+  status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending', 'approved', 'rejected', 'used')),
+  decided_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reason       TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_perm_requester ON permission_requests(requester_id);
+CREATE INDEX IF NOT EXISTS idx_perm_status ON permission_requests(status);
+
+-- In-site inbox / notifications (admin escalations, empty-session notices, info).
+CREATE TABLE IF NOT EXISTS messages (
+  id           SERIAL PRIMARY KEY,
+  to_user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  from_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  kind         TEXT NOT NULL DEFAULT 'info',
+  body         TEXT NOT NULL,
+  ref_id       INTEGER,
+  is_read      BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_user_id, is_read);
+
+-- --- Idempotent column additions to existing v2 tables --------------------
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS slot_id INTEGER REFERENCES timetable_slots(id) ON DELETE SET NULL;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS scheduled_start TIMESTAMPTZ;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS attendance_until TIMESTAMPTZ;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS teacher_status TEXT;
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS ended_reason TEXT;
+
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendee_role TEXT NOT NULL DEFAULT 'student';
+-- Widen the status CHECK to allow 'late' and 'absent' on already-existing DBs.
+ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check;
+ALTER TABLE attendance ADD CONSTRAINT attendance_status_check
+  CHECK (status IN ('present', 'denied', 'late', 'absent'));
