@@ -335,13 +335,13 @@ function Timetable({ slots, classes, onChange, flash, fail }) {
                   {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
                 </select>
               </div>
-              <div className="field"><label>Start time (UTC) *</label><input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required /></div>
+              <div className="field"><label>Start time (PKT) *</label><input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required /></div>
               <div className="field"><label>Lecture duration (min)</label><input type="number" min="5" value={duration} onChange={(e) => setDuration(e.target.value)} /></div>
               <div className="field"><label>Marking window (min)</label><input type="number" min="1" value={markWindow} onChange={(e) => setMarkWindow(e.target.value)} /></div>
               <div className="field"><label>Teacher start grace (min)</label><input type="number" min="1" value={grace} onChange={(e) => setGrace(e.target.value)} /></div>
             </div>
             <button type="submit">Add slot</button>
-            <p className="small muted mt">Times are in UTC. Students may mark for the first {markWindow} min after the teacher starts; the teacher may start up to {grace} min late before needing admin permission.</p>
+            <p className="small muted mt">Times are in Pakistan time (PKT, UTC+5). Students may mark for the first {markWindow} min after the teacher starts; the teacher may start up to {grace} min late before needing admin permission.</p>
           </form>
         )}
       </div>
@@ -352,7 +352,7 @@ function Timetable({ slots, classes, onChange, flash, fail }) {
           <div className="slot-grid">
             {slots.map((s) => (
               <div className="slot" key={s.id}>
-                <div className="when">{s.day_name} · {String(s.start_time).slice(0, 5)} UTC</div>
+                <div className="when">{s.day_name} · {String(s.start_time).slice(0, 5)} PKT</div>
                 <div className="meta">{s.subject}{s.section ? ` · Sec ${s.section}` : ''}<br />
                   {s.teacher_name} · {s.duration_minutes}m · mark {s.mark_window_minutes}m · grace {s.start_grace_minutes}m</div>
                 <button className="link danger" onClick={() => remove(s.id)}>Remove</button>

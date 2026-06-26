@@ -1,16 +1,23 @@
 // Scheduling helpers for timetable-driven sessions.
 //
-// NOTE on time zones: a slot's `start_time` is interpreted in UTC and combined
-// with the server's current UTC date to resolve a concrete occurrence. All
-// window comparisons (teacher grace, student marking window, lecture end) are
-// then done server-side in UTC, so a client clock can never decide a window.
-// (A configurable institution time zone is a planned enhancement.)
+// TIME ZONE: timetable `start_time` values are Pakistan Standard Time (PKT =
+// UTC+5, no daylight saving). They are resolved against the current PKT date and
+// converted to absolute UTC instants. All window comparisons (teacher grace,
+// student marking window, lecture end) are then done server-side on real UTC
+// instants, so a client clock can never decide a window.
+
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000; // Pakistan Standard Time = UTC+5
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// JS getUTCDay(): 0=Sun..6=Sat  ->  our scheme 0=Mon..6=Sun
+// View an instant as PKT wall-clock: the returned Date's UTC fields read as PKT.
+function pktView(now) {
+  return new Date(now.getTime() + PKT_OFFSET_MS);
+}
+
+// JS getUTCDay(): 0=Sun..6=Sat  ->  our scheme 0=Mon..6=Sun (computed in PKT)
 export function dayOfWeek(date = new Date()) {
-  return (date.getUTCDay() + 6) % 7;
+  return (pktView(date).getUTCDay() + 6) % 7;
 }
 
 export function dayName(dow) {
@@ -21,12 +28,15 @@ export function dayName(dow) {
 // counting as late.
 const EARLY_START_MS = 10 * 60 * 1000;
 
-// Resolve a slot's occurrence for `now` (its scheduled start today, the teacher
-// grace deadline, and the lecture end).
+// Resolve a slot's occurrence for `now`: its scheduled start today (PKT time of
+// day on today's PKT date, as an absolute UTC instant), the teacher grace
+// deadline, and the lecture end.
 export function slotOccurrence(slot, now = new Date()) {
   const [h, m, s] = String(slot.start_time).split(':').map((n) => parseInt(n, 10) || 0);
-  const scheduledStart = new Date(now);
-  scheduledStart.setUTCHours(h, m, s, 0);
+  const p = pktView(now);
+  // Today's PKT calendar date at the slot's PKT time-of-day, back to real UTC.
+  const utcMs = Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), p.getUTCDate(), h, m, s) - PKT_OFFSET_MS;
+  const scheduledStart = new Date(utcMs);
   const graceEnd = new Date(scheduledStart.getTime() + slot.start_grace_minutes * 60000);
   const endsAt = new Date(scheduledStart.getTime() + slot.duration_minutes * 60000);
   return { scheduledStart, graceEnd, endsAt };

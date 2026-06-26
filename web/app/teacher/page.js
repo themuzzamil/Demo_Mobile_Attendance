@@ -112,12 +112,12 @@ function TeacherHome({ user }) {
             <div className="slot-grid">
               {today.map((s) => (
                 <div className="slot" key={s.slot_id}>
-                  <div className="when">{String(s.start_time).slice(0, 5)} UTC · {s.subject}{s.section ? ` · ${s.section}` : ''}</div>
+                  <div className="when">{String(s.start_time).slice(0, 5)} PKT · {s.subject}{s.section ? ` · ${s.section}` : ''}</div>
                   <div className="meta">{s.duration_minutes}m lecture · mark {s.mark_window_minutes}m · grace {s.start_grace_minutes}m</div>
                   {s.open_session ? (
                     <span className="badge approved">In progress</span>
                   ) : s.start_state === 'too_early' ? (
-                    <span className="badge">Starts at {String(s.start_time).slice(0, 5)} UTC</span>
+                    <span className="badge">Starts at {String(s.start_time).slice(0, 5)} PKT</span>
                   ) : s.can_start ? (
                     <button className="success sm full-sm" disabled={busy} onClick={() => startClass(s)}>
                       {s.start_state === 'needs_permission' ? 'Start (approved)' : 'Start class'}

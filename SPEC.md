@@ -44,8 +44,9 @@ T0 ───────────── T0+G ──────────�
 │   normally (IP)  │
 ```
 
-**All time comparisons are server-side, in UTC.** Clients never decide whether a
-window is open.
+**Timetable times are entered in Pakistan time (PKT = UTC+5, no DST)** and
+resolved to absolute UTC instants on the server. **All time comparisons are
+server-side**, so clients never decide whether a window is open.
 
 ---
 
