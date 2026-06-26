@@ -5,6 +5,20 @@ is marked **present only when their public IP matches the teacher's** — i.e. t
 are physically on the same classroom network. No GPS, no hardcoded IPs: the
 teacher's network is detected live when they open an attendance session.
 
+## Live demo
+**URL:** https://demo-mobile-attendance.vercel.app
+
+**Admin login** (sign in at `/login`, login is by email + password):
+
+| Field    | Value             |
+|----------|-------------------|
+| Email    | `admin@demo.com`  |
+| Password | `Admin@12345`     |
+
+> ⚠️ These are demo credentials committed to a public repo. **Change the password
+> after first login** (or delete this account) before using the deployment for
+> anything real. The admin can approve teachers; teachers approve students.
+
 ## Components
 
 | Folder         | What it is                                  | Stack                    |
