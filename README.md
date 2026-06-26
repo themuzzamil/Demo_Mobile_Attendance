@@ -45,10 +45,21 @@ Full details: [`web/README.md`](web/README.md).
 
 Login is by **email + password** for all roles.
 
+## Course model
+- **Course** — catalog entry with a **code** (`CS-301`), defined once.
+- **Offering** — one **teacher** teaching a course to a **section** in a **term**
+  (`CS-301 · Sec B · Fall 2026`). Students are **enrolled** here (bulk by
+  semester/section, or individually).
+- **Timetable slot** — when an offering meets. Admin just picks the offering; the
+  teacher and the enrolled roster are attached automatically. Overlapping slots for
+  the same teacher or section are **blocked**.
+- A student belongs to **many offerings** and sees a **per-course attendance %**.
+
 ## How attendance works
-1. **Admin** builds the **weekly timetable**: subject + teacher + section, with a
-   scheduled start time, **lecture duration**, **marking window** and **teacher
-   start grace** (minutes) per slot, and enrolls students into the class roster.
+1. **Admin** defines courses, creates offerings (assigning a teacher), enrolls
+   students, then builds the **weekly timetable** by choosing an offering + day +
+   PKT time, with per-slot **lecture duration**, **marking window** and **teacher
+   start grace** (minutes).
 2. **Teacher** sees today's classes and **starts the class** at its scheduled time
    (this also marks the teacher present). Their live **public IP** is captured as
    the reference network. Starting after the grace period needs **admin permission**.
