@@ -27,8 +27,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(body || {}),
     }).then(handle),
-  del: (path) =>
-    fetch(BASE + path, { method: 'DELETE', headers: authHeaders() }).then(handle),
+  del: (path, body) =>
+    fetch(BASE + path, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    }).then(handle),
   download: async (path, filename) => {
     const res = await fetch(BASE + path, { headers: authHeaders() });
     if (!res.ok) throw new Error(`Download failed (${res.status})`);
