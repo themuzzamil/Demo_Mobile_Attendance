@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
-import MessagesInbox from '@/app/components/MessagesInbox';
 import Countdown from '@/app/components/Countdown';
+import StartingSoon from '@/app/components/StartingSoon';
 import AccountPanel from '@/app/components/AccountPanel';
 import { api, getPublicIp } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
@@ -19,7 +19,6 @@ function TeacherHome({ user }) {
   const [requests, setRequests] = useState([]);
   const [records, setRecords] = useState([]);
   const [publicIp, setPublicIp] = useState(null);
-  const [unread, setUnread] = useState(0);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,11 +63,15 @@ function TeacherHome({ user }) {
   }
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
+  // Soonest class today that hasn't started yet — drives the "starting soon" banner.
+  const upcoming = today
+    .filter((s) => !s.open_session && s.scheduled_start && new Date(s.scheduled_start).getTime() > Date.now())
+    .sort((a, b) => new Date(a.scheduled_start) - new Date(b.scheduled_start))[0];
+
   const nav = [
     { id: 'today', label: "Today's classes", icon: 'play' },
-    { id: 'requests', label: 'Late requests', icon: 'bell', count: pendingRequests.length },
+    { id: 'requests', label: 'Requests', icon: 'bell', count: pendingRequests.length },
     { id: 'records', label: 'Records', icon: 'records' },
-    { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
     { id: 'account', label: 'Account', icon: 'users' },
   ];
 
@@ -80,6 +83,11 @@ function TeacherHome({ user }) {
       {session && (
         <ActiveSession session={session} busy={busy} setBusy={setBusy}
           onClosed={() => { loadSession(); loadToday(); loadRecords(); }} flash={flash} fail={fail} />
+      )}
+
+      {!session && upcoming && (
+        <StartingSoon start={upcoming.scheduled_start} code={upcoming.code}
+                      action="Open Today's classes and start it when you're ready." />
       )}
 
       {tab === 'today' && (
@@ -95,7 +103,10 @@ function TeacherHome({ user }) {
                   {s.open_session ? (
                     <span className="badge approved">In progress</span>
                   ) : s.start_state === 'too_early' ? (
-                    <span className="badge">Starts at {String(s.start_time).slice(0, 5)} PKT</span>
+                    <div className="row" style={{ gap: '0.5rem' }}>
+                      <span className="badge">{String(s.start_time).slice(0, 5)} PKT</span>
+                      <Countdown until={s.scheduled_start} prefix="starts in" closedLabel="starting now" />
+                    </div>
                   ) : s.can_start ? (
                     <button className="success sm full-sm" disabled={busy} onClick={() => startClass(s)}>
                       {s.start_state === 'needs_permission' ? 'Start (approved)' : 'Start class'}
@@ -161,7 +172,6 @@ function TeacherHome({ user }) {
         </div>
       )}
 
-      {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
       {tab === 'account' && <AccountPanel user={user} />}
     </DashboardLayout>
   );

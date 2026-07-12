@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
-import MessagesInbox from '@/app/components/MessagesInbox';
 import Countdown from '@/app/components/Countdown';
+import StartingSoon from '@/app/components/StartingSoon';
 import AccountPanel from '@/app/components/AccountPanel';
 import { api, getPublicIp } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
+import { pktDayOfWeek, todayStartInstant } from '@/lib/pkt';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -24,7 +25,6 @@ function StudentHome({ user }) {
   const [summary, setSummary] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [publicIp, setPublicIp] = useState(null);
-  const [unread, setUnread] = useState(0);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -76,11 +76,18 @@ function StudentHome({ user }) {
   const marked = alreadyMarked === 'present' || alreadyMarked === 'late';
   const byDay = DAYS.map((d, i) => ({ day: d, items: schedule.filter((s) => s.day_of_week === i) })).filter((g) => g.items.length);
 
+  // Soonest enrolled class today that hasn't started — drives the countdown/hint.
+  const todayDow = pktDayOfWeek();
+  const upcoming = schedule
+    .filter((s) => s.day_of_week === todayDow)
+    .map((s) => ({ ...s, start: todayStartInstant(s.start_time) }))
+    .filter((s) => s.start.getTime() > Date.now())
+    .sort((a, b) => a.start - b.start)[0];
+
   const nav = [
     { id: 'mark', label: 'Mark attendance', icon: 'play' },
     { id: 'courses', label: 'My attendance', icon: 'chart' },
     { id: 'schedule', label: 'Schedule', icon: 'timetable' },
-    { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
     { id: 'history', label: 'History', icon: 'records' },
     { id: 'account', label: 'Account', icon: 'users' },
   ];
@@ -91,6 +98,11 @@ function StudentHome({ user }) {
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert ok">{msg}</div>}
 
+      {!session && upcoming && (
+        <StartingSoon start={upcoming.start} code={upcoming.code}
+                      action="Be ready — mark your attendance once your teacher starts the class." />
+      )}
+
       {tab === 'mark' && (
         <div className="card hero">
           <div className="row between wrap">
@@ -98,7 +110,15 @@ function StudentHome({ user }) {
             {session && !marked && <Countdown until={session.attendance_until} prefix="marking" closedLabel="marking closed" />}
           </div>
           <p className="small muted mt">Your network: <span className="ip-pill">{publicIp || 'detecting…'}</span></p>
-          {!session && <div className="alert info">No class is live for your enrolled courses right now. Wait for your teacher to start one.</div>}
+          {!session && (upcoming ? (
+            <div className="alert info">
+              Next class: <strong>{upcoming.code} {upcoming.title}</strong> at {String(upcoming.start_time).slice(0, 5)} PKT{' '}
+              <Countdown until={upcoming.start} prefix="· starts in" closedLabel="· starting now" />
+              <div className="small mt">Your teacher starts the class — then a <strong>Mark me present</strong> button appears here.</div>
+            </div>
+          ) : (
+            <div className="alert info">No class is live right now. When your teacher starts a class, a <strong>Mark me present</strong> button appears here.</div>
+          ))}
           {session && marked && <div className="alert ok">You are marked <strong>{alreadyMarked}</strong> for <strong>{session.subject}</strong>.</div>}
           {session && !marked && (
             <>
@@ -158,8 +178,6 @@ function StudentHome({ user }) {
           )}
         </div>
       )}
-
-      {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
 
       {tab === 'account' && <AccountPanel user={user} />}
 

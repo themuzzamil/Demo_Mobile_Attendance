@@ -8,7 +8,7 @@ teacher's network is detected live when they open an attendance session.
 ## Live demo
 **URL:** https://demo-mobile-attendance.vercel.app
 
-**Admin login** (sign in at `/login`, login is by email + password):
+**Admin login** (sign in at `/login` with the **roll no / teacher ID or email** + password):
 
 | Field    | Value                   |
 |----------|-------------------------|
@@ -16,31 +16,19 @@ teacher's network is detected live when they open an attendance session.
 | Password | `Admin@12345`           |
 
 > ⚠️ These are demo credentials committed to a public repo. **Change the password
-> after first login** (or delete this account) before using the deployment for
-> anything real. The admin can approve teachers; teachers approve students.
+> after first login** before using the deployment for anything real. The admin
+> creates every other account (teachers and students) from the **People** tab.
 
-### Seeded test accounts (demo data)
-The DB is pre-seeded (`npm run seed`) with courses, offerings, enrolments, a weekly
-timetable, and past sessions so attendance %s are populated. **Password for all
-seeded accounts: `Passw0rd!`**
-
-| Role | Logins |
-|------|--------|
-| Teacher | `imran.khan@seed.attendnet`, `sara.ahmed@seed.attendnet`, `bilal.malik@seed.attendnet` |
-| Student | `student1@seed.attendnet` … `student10@seed.attendnet` |
-
-- **CS-305 (Mobile Computing)** has a class scheduled **live now** — log in as the
-  assigned teacher, open *Today's classes → Start class*, then mark attendance as an
-  enrolled student to see the full flow.
-- **CS-301** has 6 past sessions, so its students show a real attendance %.
-- Re-run `npm run seed` any time to reset the demo data (real accounts are kept).
+The database ships **empty except the admin**. Sign in as the admin, then use
+**People → Add** to create teachers and students (each gets an auto login ID and a
+password by email), add **Courses**, create **Offerings**, **Enroll** students, and
+build the **Timetable** — the app walks that order.
 
 ## Components
 
-| Folder         | What it is                                  | Stack                    |
-|----------------|---------------------------------------------|--------------------------|
-| `web/`         | **API + admin/teacher/student dashboards**  | Next.js (App Router), Neon PostgreSQL |
-| `flutter_app/` | Native student app *(pending update — see below)* | Flutter (Dart)     |
+| Folder | What it is | Stack |
+|--------|------------|-------|
+| `web/` | **API + admin/teacher/student dashboards (responsive, mobile-friendly)** | Next.js (App Router), Neon PostgreSQL |
 
 ## Quick start
 ```bash
@@ -118,11 +106,12 @@ the dashboard to share manually — so the flow works without email too.
    closes they must **request the teacher's permission**, which (once approved)
    lets them mark and counts as present.
 4. At lecture end, enrolled non-markers are **auto-marked absent**. Teachers may
-   end an **empty** session early (10+ min in) by **messaging the admin**.
+   end an **empty** session early (10+ min in) by writing a reason (audited).
 
-All window/timing checks are enforced **server-side in UTC**. Every action is
-audited; the admin has full oversight (logs, attendees, per-teacher headcounts).
-Full design in [`SPEC.md`](SPEC.md).
+A **"class starting soon" countdown** appears for both the teacher and enrolled
+students in the last 3 minutes before a scheduled class. All window/timing checks
+are enforced **server-side in UTC**. Every action is audited; the admin has full
+oversight (logs, attendees, per-teacher headcounts). Full design in [`SPEC.md`](SPEC.md).
 
 ## Information Security features
 - **Authentication** — JWT + bcrypt. Login by roll no / teacher ID (or email) +
@@ -132,14 +121,8 @@ Full design in [`SPEC.md`](SPEC.md).
   sign-up beyond the first-admin bootstrap)
 - **Fraud prevention** — network (public-IP) presence verification
 - **Audit logging** — every sensitive action recorded with IP
-- **Confidentiality** — role-scoped data (teachers see only their subject/sessions)
+- **Confidentiality** — role-scoped data (teachers see only their own offerings and sessions)
 - **Reporting** — CSV + PDF
-
-## Status of the Flutter app
-The `flutter_app/` was written for the earlier GPS/class model and **has not yet
-been updated** to the new email-auth + approval + IP-session model. Until then the
-**`web/` student page (`/student`) is the working student client.** Updating
-Flutter is tracked as a follow-up.
 
 ## Notes / limitations
 - Students behind the same Wi-Fi share one public IP (NAT), so matching public IPs

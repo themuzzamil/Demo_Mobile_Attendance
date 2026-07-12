@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
-import MessagesInbox from '@/app/components/MessagesInbox';
 import { api } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
 
@@ -36,7 +35,6 @@ function AdminHome({ user }) {
   const [offerings, setOfferings] = useState([]);
   const [slots, setSlots] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [unread, setUnread] = useState(0);
 
   const flash = (m) => { setMsg(m); setError(''); setTimeout(() => setMsg(''), 4000); };
   const fail = (e) => setError(e.message || String(e));
@@ -72,7 +70,6 @@ function AdminHome({ user }) {
     { id: 'enroll', label: 'Enroll', icon: 'approvals' },
     { id: 'timetable', label: 'Timetable', icon: 'timetable' },
     { id: 'requests', label: 'Requests', icon: 'bell', count: pendingRequests.length },
-    { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
   ];
 
   return (
@@ -95,7 +92,6 @@ function AdminHome({ user }) {
       )}
       {tab === 'timetable' && <Timetable slots={slots} offerings={offerings} onChange={loadSlots} flash={flash} fail={fail} />}
       {tab === 'requests' && <Requests requests={requests} onDecide={decideRequest} />}
-      {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
     </DashboardLayout>
   );
 }

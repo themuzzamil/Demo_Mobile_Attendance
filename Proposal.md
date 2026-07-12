@@ -16,7 +16,7 @@ Muzzamil Hussain
 Rijja Sajjid
 
 **Project Focus**
-Mobile Attendance with location-based attendance verification
+Network-verified (public-IP) attendance delivered as a responsive web application
 
 ---
 
@@ -26,7 +26,7 @@ Mobile Attendance with location-based attendance verification
 2. Problem Statement
 3. Proposed Solution
 4. Project Objectives
-5. System Flowchart
+5. System Flow
 6. User Roles and Permissions
 7. Main Features
 8. Information Security Features
@@ -38,128 +38,103 @@ Mobile Attendance with location-based attendance verification
 
 ## 1. Introduction
 
-Attendance management is essential in educational institutes and organizations. Traditional attendance methods often lead to proxy attendance, inaccurate records, and security concerns. This project proposes a Mobile Attendance System that uses GPS-based location verification to ensure users can mark attendance only from authorized locations.
+Attendance management is essential in educational institutes and organizations. Traditional methods often lead to proxy attendance, inaccurate records, and weak oversight. This project proposes a Mobile Attendance System delivered as a **responsive web application** — usable directly in a phone or laptop browser with no app install. Instead of GPS or location tracking, it verifies that a student is physically on the **same classroom network** as the teacher by comparing public IP addresses. All timing and verification decisions are made on the server, so a client can never fake a result.
 
 ## 2. Problem Statement
 
 Current attendance systems face several challenges:
 
 - Proxy attendance and fake check-ins.
-- Attendance marking from unauthorized locations.
-- Inaccurate attendance records.
-- Lack of proper monitoring and reporting.
-- Weak access control and security mechanisms.
+- Attendance marked from outside the classroom.
+- Manual, error-prone record keeping.
+- Weak access control and unmanaged accounts.
+- Lack of auditability and reliable reporting.
 
 ## 3. Proposed Solution
 
-The proposed Mobile Attendance System allows users to check in and check out through a mobile application. The system verifies the user's GPS location before enabling attendance actions. Role-based access control, audit logs, and attendance reports help ensure secure and reliable attendance management.
+A teacher starts a timetabled class; the server captures the teacher's **public IP** as the reference network. Students mark their presence within a time-boxed window, and the server records them **present only if their public IP matches the teacher's** — otherwise the attempt is denied. Accounts are **created by an administrator** (no open sign-up); each teacher and student receives an auto-generated login ID and password by email. Enrolled students who never mark are automatically swept to **absent** at lecture end, and every sensitive action is recorded in an audit log. No GPS, no native app, no hardcoded IPs.
 
 ## 4. Project Objectives
 
-- Develop a mobile-based attendance system.
-- Implement GPS-based location verification.
-- Prevent unauthorized attendance marking.
-- Provide role-based access control.
-- Generate attendance reports.
-- Maintain secure audit logs.
+- Deliver a responsive, web-based attendance system usable on mobile browsers.
+- Verify presence through server-side network (public-IP) matching.
+- Enforce timetable-driven, time-boxed marking windows in UTC on the server.
+- Provide admin-provisioned, role-based access with auto-generated credentials.
+- Generate per-course attendance reports (CSV/PDF) and maintain audit logs.
 
-## 5. System Flowchart
+## 5. System Flow
 
 ```
-           ┌─────────────┐
-           │    Start    │
-           └──────┬──────┘
-                  │
-                  ▼
-          ┌──────────────┐
-          │ User Login   │
-          └──────┬───────┘
-                 │
-                 ▼
-       ┌────────────────────┐
-       │ Authentication     │
-       │ Successful?        │
-       └──────┬───────┬─────┘
-              │Yes    │No
-              ▼       ▼
-     ┌────────────┐   End
-     │ Get GPS    │
-     │ Location   │
-     └─────┬──────┘
-           │
-           ▼
- ┌──────────────────────┐
- │ Location Authorized? │
- └──────┬────────┬──────┘
-        │Yes     │No
-        ▼        ▼
- ┌────────────┐ Attendance
- │ Check-In / │  Denied
- │ Check-Out  │
- └─────┬──────┘
-       │
-       ▼
- ┌────────────┐
- │ Store Data │
- └─────┬──────┘
-       │
-       ▼
- ┌────────────┐
- │ Audit Logs │
- └─────┬──────┘
-       │
-       ▼
-      End
+Admin provisions accounts, courses, offerings, enrolments and the timetable
+                                  │
+                                  ▼
+        Teacher starts the scheduled class  →  server captures teacher public IP
+                                  │
+                                  ▼
+        Student taps "Mark me present" within the marking window
+                                  │
+                                  ▼
+              Student public IP == teacher public IP ?
+                        │ Yes                    │ No
+                        ▼                        ▼
+                    Present                    Denied
+                                  │
+                                  ▼
+        Lecture ends → enrolled non-markers auto-marked Absent
+                                  │
+                                  ▼
+                    Every action written to Audit Log
 ```
 
 ## 6. User Roles and Permissions
 
 | Role | Permissions |
 | --- | --- |
-| Admin | Manage users, locations, attendance records, reports, and settings |
-| Teacher / Manager | View attendance records and generate reports |
-| Student / Employee | Check-In, Check-Out, and view attendance history |
+| Admin | Provisions teachers and students; defines courses, offerings, enrolments and the weekly timetable; approves teacher late-start requests; full oversight, logs and reports. |
+| Teacher | Starts and closes scheduled classes (which records the teacher present); approves student late-mark requests; views roster and records; exports CSV/PDF. |
+| Student | Marks presence on the class network within the window; requests permission if late; views own per-course attendance percentage. |
 
 ## 7. Main Features
 
 | Feature | Description |
 | --- | --- |
-| Secure Login | User authentication and authorization |
-| GPS Verification | Verifies user location before attendance |
-| Check-In / Check-Out | Attendance recording with timestamps |
-| Role-Based Access Control | Different permissions for different roles |
-| Attendance Reports | Daily and monthly reports |
-| Audit Logs | Tracks important activities |
-| GPS Spoofing Detection | Detects fake GPS attempts |
-| Biometric Verification | Fingerprint or Face ID authentication |
+| Admin-provisioned accounts | Teachers and students are added by the admin; login ID and password are auto-generated and emailed. |
+| Network (IP) verification | A student is present only when their public IP matches the teacher's captured network. |
+| Timetable-driven sessions | Scheduled classes with per-slot lecture duration, teacher start grace and student marking window. |
+| Escalation workflow | Single-use permissions: student → teacher (late mark), teacher → admin (late start). |
+| Class-starting countdown | A live 3-minute heads-up before class for both teacher and enrolled students. |
+| Attendance and reports | Per-course attendance percentage with CSV and PDF export. |
+| Audit logging | Every sensitive action is recorded with the originating IP. |
 
 ## 8. Information Security Features
 
 | Security Concept | Implementation |
 | --- | --- |
-| Authentication | Secure login using JWT |
-| Authorization | Role-based permissions |
-| Data Integrity | Protected attendance records |
-| Confidentiality | Restricted data access |
-| Audit Logging | Activity tracking and monitoring |
-| Fraud Prevention | GPS verification and spoofing detection |
+| Authentication | JWT sessions with bcrypt password hashing; login by roll no / teacher ID or email. |
+| Authorization | Role-based access control; accounts are admin-provisioned (no open sign-up). |
+| Credential handling | Passwords are auto-generated and bcrypt-hashed; a reset invalidates the old password. |
+| Confidentiality | Role-scoped data (teachers see only their own offerings and sessions). |
+| Integrity | Server-authoritative time windows in UTC; clients cannot decide a window. |
+| Audit logging | Continuous activity tracking with IP for accountability. |
+| Fraud prevention | Public-IP network verification and single-use escalation permissions. |
 
 ## 9. Technology Stack
 
 | Layer | Technology |
 | --- | --- |
-| Mobile Application | Flutter |
-| Backend | Node.js + Express.js |
-| Database | PostgreSQL / Supabase |
-| Authentication | JWT |
-| Location Services | Geolocator / Google Maps API |
-| Admin Dashboard | React.js |
-| Reports | PDF / CSV Generation |
+| Web application | Next.js (App Router) + React (responsive) |
+| Backend / API | Next.js Route Handlers (Node.js) |
+| Database | PostgreSQL (Neon) |
+| Authentication | JWT + bcrypt |
+| Email | SMTP via Nodemailer (or Resend) |
+| Presence signal | Public-IP comparison |
+| Reports | CSV + PDF (PDFKit) |
+| Hosting | Vercel |
 
 ## 10. Expected Outcome
 
-The system will provide a secure and reliable attendance management solution by ensuring attendance can only be marked from authorized locations. It will improve attendance accuracy, reduce proxy attendance, and strengthen security through authentication, authorization, and location verification.
+The system provides a secure, reliable, install-free attendance solution that ensures attendance can only be marked from the classroom network and within scheduled windows. It improves attendance accuracy, reduces proxy attendance, and strengthens security through authentication, authorization, network verification, and full auditability.
 
 ## 11. Conclusion
 
-The Mobile Attendance System combines location-based attendance verification with essential Information Security concepts such as authentication, authorization, role-based access control, audit logging, and fraud prevention. The project offers a practical, secure, and scalable solution for attendance management in educational institutes and organizations.
+The Mobile Attendance System combines network-based presence verification with essential Information Security concepts — authentication, authorization, role-based access control, audit logging, and fraud prevention. Delivered as a responsive web application, it offers a practical, secure, and scalable solution for attendance management in educational institutes and organizations.

@@ -14,23 +14,23 @@ npm run migrate -- --reset   # build a clean schema (drops existing data)
 npm run dev                  # http://localhost:3000
 ```
 
-There is **no seed data** — create the first account from the UI.
+The database ships **empty except the admin** — create everything else from the UI.
 
-## Accounts & approval workflow
+## Accounts & provisioning
 
-Sign up at `/signup` (role tabs):
+There is **no public sign-up**. `/signup` only creates the **first admin** (it 403s
+once an admin exists); everyone else is **provisioned by the admin**.
 
-| Role    | Signup fields                                        | Approval                          |
-|---------|------------------------------------------------------|-----------------------------------|
-| Admin   | name, email, password                                | auto-approved                     |
-| Teacher | name, email, password, **subject**                   | approved by an **admin**          |
-| Student | name, email, password, **subject, semester, section, roll no** | approved by a **teacher** of the same subject |
+| Role    | Admin enters        | Auto-generated                         |
+|---------|---------------------|----------------------------------------|
+| Admin   | name, email, password (bootstrap once) | —                       |
+| Teacher | name, email         | **Teacher ID** (`0001…`) + password     |
+| Student | name, email, semester, section | **roll number** (`00001…`) + password |
 
-Everyone logs in with **email + password**. Unapproved users can log in but see a
-"pending approval" screen until approved.
-
-Typical first run: sign up an **admin** → admin approves teachers → teachers
-approve students of their subject.
+When the admin adds a teacher/student, their **login ID + password are emailed**
+(see email env vars in the root README). They sign in with **roll no / teacher ID
+(or email) + password**, and change it from the **Account** tab. Lost credentials:
+`/request-access` emails a fresh password, or the admin re-issues from **People**.
 
 ## How the IP check works
 1. A **teacher opens an attendance session**. The browser detects the teacher's
@@ -48,18 +48,21 @@ approve students of their subject.
 > would change the public IP — but it cleanly enforces "present on the class network".)
 
 ## Pages
-- `/login`, `/signup`
-- `/admin` — approve teachers, view all users, stats
-- `/teacher` — open/close session (shows captured IP + live present count), approve
-  students of your subject, view records, export CSV/PDF
-- `/student` — mark present against the open session, view history
+- `/login`, `/signup` (first-admin bootstrap), `/request-access` (get/reset credentials)
+- `/admin` — People (add/manage users), Courses, Offerings, Enroll, Timetable,
+  Requests, Overview/stats
+- `/teacher` — Today's classes (start/close, "starting soon" countdown), Requests,
+  Records (CSV/PDF), Account
+- `/student` — Mark attendance (network-verified, "starting soon" countdown),
+  My attendance %, Schedule, History, Account
 
 ## API (all under `/api`)
-- `auth/signup`, `auth/login`, `auth/me`
-- `users` (list), `users/pending`, `users/:id/approve`, `users/:id/reject`, `users/:id` (DELETE)
+- `auth/login`, `auth/signup` (bootstrap), `auth/me`, `auth/request-access`, `auth/change-password`
+- `users` (list + provision), `users/:id` (enrollments / DELETE), `users/:id/invite` (issue credentials)
+- `courses`, `offerings`, `offerings/:id/enroll`, `timetable` (+ `today`, `my`)
 - `sessions/open`, `sessions/:id/close`, `sessions/active`, `sessions` (list)
-- `attendance/check-in`, `attendance/me`, `attendance` (records)
-- `reports/attendance/csv`, `reports/attendance/pdf`, `reports/audit`
+- `attendance/check-in`, `attendance/me`, `attendance/my-summary`, `attendance` (records)
+- `permissions` (+ `:id`), `reports/attendance/csv`, `reports/attendance/pdf`, `reports/audit`
 
 ## Deploy (Vercel)
 Set root to `web/`, add `DATABASE_URL` + `JWT_SECRET`. API routes run as serverless
