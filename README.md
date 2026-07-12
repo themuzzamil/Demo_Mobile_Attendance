@@ -10,10 +10,10 @@ teacher's network is detected live when they open an attendance session.
 
 **Admin login** (sign in at `/login`, login is by email + password):
 
-| Field    | Value             |
-|----------|-------------------|
-| Email    | `admin@demo.com`  |
-| Password | `Admin@12345`     |
+| Field    | Value                   |
+|----------|-------------------------|
+| Email    | `admin@attendnet.com`   |
+| Password | `Admin@12345`           |
 
 > ⚠️ These are demo credentials committed to a public repo. **Change the password
 > after first login** (or delete this account) before using the deployment for
@@ -47,35 +47,69 @@ seeded accounts: `Passw0rd!`**
 cd web
 npm install
 npm run migrate -- --reset    # clean schema, no dummy data
-npm run dev                   # http://localhost:3000  →  go to /signup
+npm run dev                   # http://localhost:3000
 ```
-Full details: [`web/README.md`](web/README.md).
+Then open `/signup` **once** to create the first administrator. After that,
+self-signup is closed and the admin provisions everyone else. Full details:
+[`web/README.md`](web/README.md).
 
-## Roles & approval chain
-- **Admin** (name, email, password) — self-approved. Approves teachers.
-- **Teacher** (name, email, password, subject) — approved by admin. Approves
-  students of their subject; starts/closes scheduled classes; approves student
-  late-mark requests.
-- **Student** (name, email, password, subject, semester, section, roll no) —
-  approved by a teacher of their subject. Marks attendance.
+## Roles & provisioning
+Accounts are **created by an administrator**, not self-service. There is no public
+sign-up beyond bootstrapping the first admin.
 
-Login is by **email + password** for all roles.
+- **Admin** (name, email, password) — created once via `/signup` (bootstrap).
+  Adds teachers and students, builds the catalog/timetable, resolves escalations.
+- **Teacher** (name, email) — **added by admin**. Gets an auto **Teacher ID**
+  (`0001`, `0002`, …). Starts/closes scheduled classes; approves late-mark requests.
+- **Student** (name, email, semester, section) — **added by admin**. Gets an auto
+  **roll number** (`00001`, `00002`, …), then is **enrolled** into that semester's
+  offerings. Marks attendance.
+
+**Credential flow:** when the admin adds a teacher/student, their **login ID**
+(roll no / teacher ID) and a **password are auto-generated** and **emailed** to
+them. They **sign in with that ID (or their email) + password**, then change the
+password from their own dashboard (**Account** tab). If they lose it, they request a
+fresh set at **`/request-access`** (which generates a **new** password — the old one
+stops working), or the admin re-issues from the People tab. Credentials are also
+shown to the admin as a fallback when email isn't configured.
+
+Login is by **roll number / teacher ID (or email) + password**.
+
+### Email configuration
+Emails send via **SMTP** (e.g. a Gmail app password) if configured, else via
+[Resend](https://resend.com). Set these env vars (local `.env.local` **and** Vercel):
+
+| Var | Purpose |
+|-----|---------|
+| `SMTP_HOST` | e.g. `smtp.gmail.com` |
+| `SMTP_PORT` | `465` (implicit TLS) or `587` (STARTTLS) |
+| `SMTP_USER` | SMTP username, e.g. your Gmail address |
+| `SMTP_PASS` | SMTP password / **Gmail app password** |
+| `EMAIL_FROM` | From-address, e.g. `AttendNet <you@gmail.com>` (defaults to `SMTP_USER`) |
+| `APP_BASE_URL` | Base URL for the sign-in link when the request origin is unavailable |
+| `RESEND_API_KEY` | *(alternative to SMTP)* Resend API key |
+
+If no provider is configured, the generated credentials are shown to the admin in
+the dashboard to share manually — so the flow works without email too.
 
 ## Course model
-- **Course** — catalog entry with a **code** (`CS-301`), defined once.
+- **Course** — catalog entry with a **code** (`CS-301`) and a **semester** (1–8),
+  defined once.
 - **Offering** — one **teacher** teaching a course to a **section** in a **term**
-  (`CS-301 · Sec B · Fall 2026`). Students are **enrolled** here (bulk by
-  semester/section, or individually).
+  (`CS-301 · Sec B · Fall 2026`). The offering **inherits the course's semester**.
+  Students are **enrolled** here: the admin picks a student and only that student's
+  **semester's** offerings are shown to enroll into (dropdown-driven, no free text).
 - **Timetable slot** — when an offering meets. Admin just picks the offering; the
   teacher and the enrolled roster are attached automatically. Overlapping slots for
   the same teacher or section are **blocked**.
 - A student belongs to **many offerings** and sees a **per-course attendance %**.
 
 ## How attendance works
-1. **Admin** defines courses, creates offerings (assigning a teacher), enrolls
-   students, then builds the **weekly timetable** by choosing an offering + day +
-   PKT time, with per-slot **lecture duration**, **marking window** and **teacher
-   start grace** (minutes).
+1. **Admin** adds teachers and students, defines courses (each tagged to a
+   semester), creates offerings (assigning a teacher), enrolls students into their
+   semester's offerings, then builds the **weekly timetable** by choosing an
+   offering + day + PKT time, with per-slot **lecture duration**, **marking window**
+   and **teacher start grace** (minutes).
 2. **Teacher** sees today's classes and **starts the class** at its scheduled time
    (this also marks the teacher present). Their live **public IP** is captured as
    the reference network. Starting after the grace period needs **admin permission**.
@@ -91,8 +125,11 @@ audited; the admin has full oversight (logs, attendees, per-teacher headcounts).
 Full design in [`SPEC.md`](SPEC.md).
 
 ## Information Security features
-- **Authentication** — JWT + bcrypt, email/password
-- **Authorization** — role-based access + an **approval workflow** (admin→teacher→student)
+- **Authentication** — JWT + bcrypt. Login by roll no / teacher ID (or email) +
+  password. Admin-provisioned accounts get an auto-generated password (bcrypt-hashed);
+  resets invalidate the old password. `/request-access` avoids account enumeration.
+- **Authorization** — role-based access; accounts are **admin-provisioned** (no open
+  sign-up beyond the first-admin bootstrap)
 - **Fraud prevention** — network (public-IP) presence verification
 - **Audit logging** — every sensitive action recorded with IP
 - **Confidentiality** — role-scoped data (teachers see only their subject/sessions)

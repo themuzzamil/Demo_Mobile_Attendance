@@ -2,29 +2,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
-import PendingScreen from '@/app/components/PendingScreen';
 import MessagesInbox from '@/app/components/MessagesInbox';
 import Countdown from '@/app/components/Countdown';
+import AccountPanel from '@/app/components/AccountPanel';
 import { api, getPublicIp } from '@/lib/clientApi';
+import { useTab } from '@/lib/useTab';
 
 export default function TeacherPage() {
-  return (
-    <Shell role="teacher">
-      {(user, setUser) =>
-        user.status !== 'approved'
-          ? <PendingScreen user={user} onUpdate={setUser} />
-          : <TeacherHome user={user} />
-      }
-    </Shell>
-  );
+  return <Shell role="teacher">{(user) => <TeacherHome user={user} />}</Shell>;
 }
 
 function TeacherHome({ user }) {
-  const [tab, setTab] = useState('today');
+  const [tab, setTab] = useTab('today');
   const [session, setSession] = useState(null);
   const [today, setToday] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [pending, setPending] = useState([]);
   const [records, setRecords] = useState([]);
   const [publicIp, setPublicIp] = useState(null);
   const [unread, setUnread] = useState(0);
@@ -38,15 +30,14 @@ function TeacherHome({ user }) {
   const loadSession = useCallback(async () => { try { setSession((await api.get('/sessions/active')).session); } catch (e) { fail(e); } }, []);
   const loadToday = useCallback(async () => { try { setToday((await api.get('/timetable/today')).slots); } catch (e) { fail(e); } }, []);
   const loadRequests = useCallback(async () => { try { setRequests((await api.get('/permissions')).requests); } catch (e) { fail(e); } }, []);
-  const loadPending = useCallback(async () => { try { setPending((await api.get('/users/pending')).pending); } catch (e) { fail(e); } }, []);
   const loadRecords = useCallback(async () => { try { setRecords((await api.get('/attendance')).attendance); } catch (e) { fail(e); } }, []);
 
   useEffect(() => {
-    loadSession(); loadToday(); loadRequests(); loadPending(); loadRecords();
+    loadSession(); loadToday(); loadRequests(); loadRecords();
     getPublicIp().then(setPublicIp);
     const t = setInterval(() => { loadSession(); loadToday(); loadRequests(); }, 20000);
     return () => clearInterval(t);
-  }, [loadSession, loadToday, loadRequests, loadPending, loadRecords]);
+  }, [loadSession, loadToday, loadRequests, loadRecords]);
 
   async function startClass(slot) {
     setBusy(true); setError('');
@@ -71,22 +62,18 @@ function TeacherHome({ user }) {
     try { await api.post(`/permissions/${id}`, { decision }); await loadRequests(); flash(`Request ${decision}d.`); }
     catch (e) { fail(e); }
   }
-  async function decideStudent(id, action) {
-    try { await api.post(`/users/${id}/${action}`, {}); await loadPending(); flash(`Student ${action}d.`); }
-    catch (e) { fail(e); }
-  }
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');
   const nav = [
     { id: 'today', label: "Today's classes", icon: 'play' },
     { id: 'requests', label: 'Late requests', icon: 'bell', count: pendingRequests.length },
-    { id: 'students', label: 'Students', icon: 'approvals', count: pending.length },
     { id: 'records', label: 'Records', icon: 'records' },
     { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
+    { id: 'account', label: 'Account', icon: 'users' },
   ];
 
   return (
-    <DashboardLayout user={user} title="Teacher" subtitle={user.subject} nav={nav} active={tab} onNavigate={setTab}>
+    <DashboardLayout user={user} title="Teacher" subtitle={user.roll_no ? `ID ${user.roll_no}` : 'Teacher'} nav={nav} active={tab} onNavigate={setTab}>
       {error && <div className="alert error">{error}</div>}
       {msg && <div className="alert ok">{msg}</div>}
 
@@ -146,25 +133,6 @@ function TeacherHome({ user }) {
         </div>
       )}
 
-      {tab === 'students' && (
-        <div className="card">
-          <h3>Pending students <span className="muted small">({pending.length})</span></h3>
-          {pending.length === 0 ? <p className="muted small">No students awaiting approval for {user.subject}.</p> : (
-            <ul className="list">
-              {pending.map((s) => (
-                <li key={s.id}>
-                  <div><strong>{s.name}</strong> <span className="muted small">({s.email})</span>
-                    <div className="small muted">Roll {s.roll_no} · Sem {s.semester} · Sec {s.section}</div></div>
-                  <div className="spacer" />
-                  <button className="success sm" onClick={() => decideStudent(s.id, 'approve')}>Approve</button>
-                  <button className="ghost sm" onClick={() => decideStudent(s.id, 'reject')}>Reject</button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
       {tab === 'records' && (
         <div className="card">
           <div className="row between">
@@ -194,6 +162,7 @@ function TeacherHome({ user }) {
       )}
 
       {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
+      {tab === 'account' && <AccountPanel user={user} />}
     </DashboardLayout>
   );
 }

@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { requireRole } from '@/lib/auth';
+import { requireRole, requireApproved } from '@/lib/auth';
 import { audit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
+
+// GET (admin): a student's current enrollments (offering ids), for the enroll UI.
+export async function GET(request, { params }) {
+  const { error, status } = requireApproved(request, 'admin');
+  if (error) return NextResponse.json({ error }, { status });
+  const { rows } = await query(
+    'SELECT offering_id FROM enrollments WHERE student_id = $1',
+    [Number(params.id)]
+  );
+  return NextResponse.json({ offering_ids: rows.map((r) => r.offering_id) });
+}
 
 // Admin can delete any account except their own.
 export async function DELETE(request, { params }) {

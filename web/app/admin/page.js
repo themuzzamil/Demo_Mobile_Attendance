@@ -4,20 +4,33 @@ import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
 import MessagesInbox from '@/app/components/MessagesInbox';
 import { api } from '@/lib/clientApi';
+import { useTab } from '@/lib/useTab';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const SEMS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+// Academic term is auto-derived: Jan–Jun = Spring, Jul–Dec = Fall. We offer the
+// current and next year so the admin just picks from a dropdown (default = now).
+function buildTerms() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const current = `${now.getMonth() < 6 ? 'Spring' : 'Fall'} ${y}`;
+  const opts = [];
+  for (const yr of [y, y + 1]) for (const s of ['Spring', 'Fall']) opts.push(`${s} ${yr}`);
+  // Put the current term first so it's the default selection.
+  return { current, opts: [current, ...opts.filter((t) => t !== current)] };
+}
 
 export default function AdminPage() {
   return <Shell role="admin">{(user) => <AdminHome user={user} />}</Shell>;
 }
 
 function AdminHome({ user }) {
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useTab('overview');
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
   const [overview, setOverview] = useState(null);
-  const [pending, setPending] = useState([]);
   const [users, setUsers] = useState([]);
   const [courses, setCourses] = useState([]);
   const [offerings, setOfferings] = useState([]);
@@ -29,7 +42,6 @@ function AdminHome({ user }) {
   const fail = (e) => setError(e.message || String(e));
 
   const loadOverview = useCallback(async () => { try { setOverview(await api.get('/admin/overview')); } catch (e) { fail(e); } }, []);
-  const loadPending = useCallback(async () => { try { setPending((await api.get('/users/pending')).pending); } catch (e) { fail(e); } }, []);
   const loadUsers = useCallback(async () => { try { setUsers((await api.get('/users')).users); } catch (e) { fail(e); } }, []);
   const loadCourses = useCallback(async () => { try { setCourses((await api.get('/courses')).courses); } catch (e) { fail(e); } }, []);
   const loadOfferings = useCallback(async () => { try { setOfferings((await api.get('/offerings')).offerings); } catch (e) { fail(e); } }, []);
@@ -37,16 +49,13 @@ function AdminHome({ user }) {
   const loadRequests = useCallback(async () => { try { setRequests((await api.get('/permissions')).requests); } catch (e) { fail(e); } }, []);
 
   useEffect(() => {
-    loadOverview(); loadPending(); loadUsers(); loadCourses(); loadOfferings(); loadSlots(); loadRequests();
-  }, [loadOverview, loadPending, loadUsers, loadCourses, loadOfferings, loadSlots, loadRequests]);
+    loadOverview(); loadUsers(); loadCourses(); loadOfferings(); loadSlots(); loadRequests();
+  }, [loadOverview, loadUsers, loadCourses, loadOfferings, loadSlots, loadRequests]);
 
   const teachers = users.filter((u) => u.role === 'teacher' && u.status === 'approved');
   const students = users.filter((u) => u.role === 'student' && u.status === 'approved');
   const pendingRequests = requests.filter((r) => r.status === 'pending');
 
-  async function decideUser(id, action) {
-    try { await api.post(`/users/${id}/${action}`, {}); await loadPending(); await loadUsers(); flash(`Teacher ${action}d.`); } catch (e) { fail(e); }
-  }
   async function removeUser(id) {
     if (!confirm('Delete this account permanently?')) return;
     try { await api.del(`/users/${id}`); await loadUsers(); } catch (e) { fail(e); }
@@ -57,13 +66,13 @@ function AdminHome({ user }) {
 
   const nav = [
     { id: 'overview', label: 'Overview', icon: 'overview' },
-    { id: 'approvals', label: 'Approvals', icon: 'approvals', count: pending.length },
+    { id: 'users', label: 'People', icon: 'users' },
     { id: 'courses', label: 'Courses', icon: 'course' },
     { id: 'offerings', label: 'Offerings', icon: 'offering' },
+    { id: 'enroll', label: 'Enroll', icon: 'approvals' },
     { id: 'timetable', label: 'Timetable', icon: 'timetable' },
     { id: 'requests', label: 'Requests', icon: 'bell', count: pendingRequests.length },
     { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
-    { id: 'users', label: 'Users', icon: 'users' },
   ];
 
   return (
@@ -72,16 +81,21 @@ function AdminHome({ user }) {
       {msg && <div className="alert ok">{msg}</div>}
 
       {tab === 'overview' && <Overview overview={overview} />}
-      {tab === 'approvals' && <Approvals pending={pending} onDecide={decideUser} />}
+      {tab === 'users' && (
+        <Users users={users} meId={user.id} onRemove={removeUser}
+               onChange={() => { loadUsers(); loadOverview(); }} flash={flash} fail={fail} />
+      )}
       {tab === 'courses' && <Courses courses={courses} onChange={() => { loadCourses(); loadOverview(); }} flash={flash} fail={fail} />}
       {tab === 'offerings' && (
         <Offerings offerings={offerings} courses={courses} teachers={teachers} students={students}
                    onChange={() => { loadOfferings(); loadOverview(); }} flash={flash} fail={fail} />
       )}
+      {tab === 'enroll' && (
+        <Enroll students={students} offerings={offerings} onChange={loadOfferings} flash={flash} fail={fail} />
+      )}
       {tab === 'timetable' && <Timetable slots={slots} offerings={offerings} onChange={loadSlots} flash={flash} fail={fail} />}
       {tab === 'requests' && <Requests requests={requests} onDecide={decideRequest} />}
       {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
-      {tab === 'users' && <Users users={users} meId={user.id} onRemove={removeUser} />}
     </DashboardLayout>
   );
 }
@@ -161,37 +175,17 @@ function Overview({ overview }) {
   );
 }
 
-function Approvals({ pending, onDecide }) {
-  return (
-    <div className="card">
-      <h3>Pending teacher approvals <span className="muted small">({pending.length})</span></h3>
-      {pending.length === 0 ? <p className="muted small" style={{ margin: 0 }}>No teachers awaiting approval.</p> : (
-        <ul className="list">
-          {pending.map((t) => (
-            <li key={t.id}>
-              <div><strong>{t.name}</strong> <span className="muted small">({t.email})</span>
-                <div className="small muted">Subject: {t.subject}</div></div>
-              <div className="spacer" />
-              <button className="success sm" onClick={() => onDecide(t.id, 'approve')}>Approve</button>
-              <button className="ghost sm" onClick={() => onDecide(t.id, 'reject')}>Reject</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 function Courses({ courses, onChange, flash, fail }) {
   const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
+  const [semester, setSemester] = useState('');
   const [credit, setCredit] = useState('');
 
   async function create(e) {
     e.preventDefault();
     try {
-      await api.post('/courses', { code, title, credit_hours: credit || null });
-      setCode(''); setTitle(''); setCredit(''); flash('Course added.'); onChange();
+      await api.post('/courses', { code, title, semester: Number(semester), credit_hours: credit || null });
+      setCode(''); setTitle(''); setSemester(''); setCredit(''); flash('Course added.'); onChange();
     } catch (err) { fail(err); }
   }
 
@@ -203,9 +197,16 @@ function Courses({ courses, onChange, flash, fail }) {
           <div className="grid2">
             <div className="field"><label>Course code *</label><input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. CS-301" required /></div>
             <div className="field"><label>Title *</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Information Security" required /></div>
+            <div className="field"><label>Semester *</label>
+              <select value={semester} onChange={(e) => setSemester(e.target.value)} required>
+                <option value="">Select semester…</option>
+                {SEMS.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+              </select>
+            </div>
             <div className="field"><label>Credit hours</label><input type="number" min="1" max="6" value={credit} onChange={(e) => setCredit(e.target.value)} placeholder="3" /></div>
           </div>
           <button type="submit">Add course</button>
+          <p className="small muted mt">A course belongs to one semester. When you enroll a student, only their semester&apos;s courses appear.</p>
         </form>
       </div>
       <div className="card">
@@ -213,10 +214,10 @@ function Courses({ courses, onChange, flash, fail }) {
         {courses.length === 0 ? <p className="muted small" style={{ margin: 0 }}>No courses yet.</p> : (
           <div className="table-wrap">
             <table className="table">
-              <thead><tr><th>Code</th><th>Title</th><th>Credits</th><th>Offerings</th></tr></thead>
+              <thead><tr><th>Code</th><th>Title</th><th>Semester</th><th>Credits</th><th>Offerings</th></tr></thead>
               <tbody>
                 {courses.map((c) => (
-                  <tr key={c.id}><td className="mono">{c.code}</td><td>{c.title}</td><td>{c.credit_hours || '—'}</td><td>{c.offering_count}</td></tr>
+                  <tr key={c.id}><td className="mono">{c.code}</td><td>{c.title}</td><td>{c.semester ? `Sem ${c.semester}` : '—'}</td><td>{c.credit_hours || '—'}</td><td>{c.offering_count}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -228,18 +229,20 @@ function Courses({ courses, onChange, flash, fail }) {
 }
 
 function Offerings({ offerings, courses, teachers, students, onChange, flash, fail }) {
+  const TERMS = buildTerms();
   const [courseId, setCourseId] = useState('');
   const [teacherId, setTeacherId] = useState('');
-  const [term, setTerm] = useState('');
-  const [semester, setSemester] = useState('');
+  const [term, setTerm] = useState(TERMS.current);
   const [section, setSection] = useState('');
   const [openRoster, setOpenRoster] = useState(null);
+
+  const selectedCourse = courses.find((c) => String(c.id) === String(courseId));
 
   async function create(e) {
     e.preventDefault();
     try {
-      await api.post('/offerings', { course_id: Number(courseId), teacher_id: teacherId || null, term, semester, section });
-      setCourseId(''); setTeacherId(''); setSemester(''); setSection(''); flash('Offering created.'); onChange();
+      await api.post('/offerings', { course_id: Number(courseId), teacher_id: teacherId || null, term, section });
+      setCourseId(''); setTeacherId(''); setSection(''); flash('Offering created.'); onChange();
     } catch (err) { fail(err); }
   }
 
@@ -253,7 +256,7 @@ function Offerings({ offerings, courses, teachers, students, onChange, flash, fa
               <div className="field"><label>Course *</label>
                 <select value={courseId} onChange={(e) => setCourseId(e.target.value)} required>
                   <option value="">Select course…</option>
-                  {courses.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
+                  {courses.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.title}{c.semester ? ` (Sem ${c.semester})` : ''}</option>)}
                 </select>
               </div>
               <div className="field"><label>Teacher *</label>
@@ -262,10 +265,16 @@ function Offerings({ offerings, courses, teachers, students, onChange, flash, fa
                   {teachers.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
-              <div className="field"><label>Term *</label><input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="e.g. Fall 2026" required /></div>
-              <div className="field"><label>Semester</label><input value={semester} onChange={(e) => setSemester(e.target.value)} placeholder="e.g. 6" /></div>
+              <div className="field"><label>Term *</label>
+                <select value={term} onChange={(e) => setTerm(e.target.value)} required>
+                  {TERMS.opts.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
               <div className="field"><label>Section</label><input value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. B" /></div>
             </div>
+            {selectedCourse && (
+              <p className="small muted">Semester <strong>{selectedCourse.semester || '—'}</strong> is inherited from {selectedCourse.code}.</p>
+            )}
             <button type="submit">Create offering</button>
           </form>
         )}
@@ -346,6 +355,93 @@ function Roster({ offeringId, students, onChange, flash, fail }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// Student-centric enrollment: pick a student, and only the offerings whose course
+// belongs to that student's semester are shown to enroll into.
+function Enroll({ students, offerings, onChange, flash, fail }) {
+  const [studentId, setStudentId] = useState('');
+  const [enrolledIds, setEnrolledIds] = useState(new Set());
+  const [loading, setLoading] = useState(false);
+
+  const student = students.find((s) => String(s.id) === String(studentId));
+  const studentSem = student?.semester ? String(student.semester) : null;
+  const matching = offerings.filter(
+    (o) => studentSem && String(o.course_semester ?? o.semester ?? '') === studentSem
+  );
+
+  const loadEnrolled = useCallback(async (sid) => {
+    if (!sid) { setEnrolledIds(new Set()); return; }
+    setLoading(true);
+    try {
+      const r = await api.get(`/users/${sid}`);
+      setEnrolledIds(new Set((r.offering_ids || []).map(Number)));
+    } catch (e) { fail(e); } finally { setLoading(false); }
+  }, [fail]);
+
+  function pick(id) { setStudentId(id); loadEnrolled(id); }
+
+  async function toggle(offeringId, isEnrolled) {
+    try {
+      if (isEnrolled) {
+        await api.del(`/offerings/${offeringId}/enroll`, { student_id: Number(studentId) });
+        flash('Removed from course.');
+      } else {
+        await api.post(`/offerings/${offeringId}/enroll`, { student_id: Number(studentId) });
+        flash('Enrolled.');
+      }
+      await loadEnrolled(studentId); onChange();
+    } catch (e) { fail(e); }
+  }
+
+  return (
+    <div className="card">
+      <h3>Enroll a student</h3>
+      <div className="field" style={{ maxWidth: 380 }}>
+        <label>Student</label>
+        <select value={studentId} onChange={(e) => pick(e.target.value)}>
+          <option value="">Select student…</option>
+          {students.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}{s.roll_no ? ` (${s.roll_no})` : ''} · Sem {s.semester || '—'}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {!studentId ? (
+        <p className="muted small">Pick a student to see the courses offered in their semester.</p>
+      ) : !studentSem ? (
+        <div className="alert info">This student has no semester set, so no courses can be matched. Edit the student to add a semester.</div>
+      ) : (
+        <>
+          <p className="small muted">Showing offerings for <strong>Semester {studentSem}</strong>.</p>
+          {loading ? <p className="muted small">Loading…</p> : matching.length === 0 ? (
+            <div className="alert info">No offerings exist for semester {studentSem} yet. Add a course for that semester and create an offering first.</div>
+          ) : (
+            <ul className="list">
+              {matching.map((o) => {
+                const isEnrolled = enrolledIds.has(Number(o.id));
+                return (
+                  <li key={o.id}>
+                    <div>
+                      <strong className="mono">{o.code}</strong> {o.title}
+                      <div className="small muted">{o.section ? `Sec ${o.section} · ` : ''}{o.term} · {o.teacher_name || 'no teacher'}</div>
+                    </div>
+                    <div className="spacer" />
+                    {isEnrolled && <span className="badge approved" style={{ marginRight: 8 }}>enrolled</span>}
+                    <button className={isEnrolled ? 'ghost sm' : 'success sm'} onClick={() => toggle(o.id, isEnrolled)}>
+                      {isEnrolled ? 'Remove' : 'Enroll'}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
@@ -448,27 +544,130 @@ function Requests({ requests, onDecide }) {
   );
 }
 
-function Users({ users, meId, onRemove }) {
+function CredentialsBanner({ cred }) {
+  if (!cred) return null;
+  return (
+    <div className={`alert ${cred.sent ? 'ok' : 'info'}`} style={{ overflowWrap: 'anywhere' }}>
+      <div><strong>{cred.idLabel}:</strong> <span className="mono" style={{ userSelect: 'all' }}>{cred.loginId}</span></div>
+      {cred.sent ? (
+        <div className="small mt">Login ID and password have been emailed to the user.</div>
+      ) : (
+        <>
+          <div><strong>Password:</strong> <span className="mono" style={{ userSelect: 'all' }}>{cred.password}</span></div>
+          <div className="small mt">
+            {cred.emailConfigured
+              ? 'Email could not be delivered — share these credentials with the user directly.'
+              : 'Email is not configured — share these credentials with the user directly.'}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AddPerson({ onChange, flash, fail }) {
+  const [role, setRole] = useState('student');
+  const [form, setForm] = useState({});
+  const [cred, setCred] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true); setCred(null);
+    try {
+      const payload = role === 'student'
+        ? { role, name: form.name, email: form.email, semester: form.semester, section: form.section }
+        : { role, name: form.name, email: form.email };
+      const res = await api.post('/users', payload);
+      setCred(res.credentials);
+      setForm({});
+      flash(`${role === 'student' ? 'Student' : 'Teacher'} added.`);
+      onChange();
+    } catch (err) { fail(err); } finally { setBusy(false); }
+  }
+
   return (
     <div className="card">
-      <h3>All users</h3>
-      <div className="table-wrap">
-        <table className="table">
-          <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Subject</th><th>Roll/Sec</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.name}</td><td><span className="badge role">{u.role}</span></td>
-                <td className="small">{u.email}</td><td>{u.subject || '—'}</td>
-                <td className="small">{u.roll_no ? `${u.roll_no} / ${u.section || '-'}` : '—'}</td>
-                <td><span className={`badge ${u.status}`}>{u.status}</span></td>
-                <td>{u.id !== meId && <button className="link danger" onClick={() => onRemove(u.id)}>Delete</button>}</td>
-              </tr>
-            ))}
-            {users.length === 0 && <tr><td colSpan="7" className="center muted">No users yet.</td></tr>}
-          </tbody>
-        </table>
+      <h3>Add a person</h3>
+      <div className="tabs">
+        <button type="button" className={role === 'student' ? 'active' : ''} onClick={() => { setRole('student'); setCred(null); }}>Student</button>
+        <button type="button" className={role === 'teacher' ? 'active' : ''} onClick={() => { setRole('teacher'); setCred(null); }}>Teacher</button>
       </div>
+      <CredentialsBanner cred={cred} />
+      <form onSubmit={submit}>
+        <div className="grid2">
+          <div className="field"><label>Full name *</label><input value={form.name || ''} onChange={(e) => set('name', e.target.value)} required /></div>
+          <div className="field"><label>Email *</label><input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} required placeholder="where credentials are emailed" /></div>
+          {role === 'student' && (
+            <>
+              <div className="field"><label>Semester *</label>
+                <select value={form.semester || ''} onChange={(e) => set('semester', e.target.value)} required>
+                  <option value="">Select…</option>
+                  {SEMS.map((s) => <option key={s} value={s}>Semester {s}</option>)}
+                </select>
+              </div>
+              <div className="field"><label>Section</label><input value={form.section || ''} onChange={(e) => set('section', e.target.value)} placeholder="e.g. B" /></div>
+            </>
+          )}
+        </div>
+        <button type="submit" disabled={busy}>{busy ? 'Adding…' : `Add ${role}`}</button>
+        <p className="small muted mt">
+          {role === 'student' ? 'Roll number' : 'Teacher ID'} and password are generated automatically and emailed to the user.
+          They can change the password from their own dashboard.
+        </p>
+      </form>
     </div>
+  );
+}
+
+function Users({ users, meId, onRemove, onChange, flash, fail }) {
+  const [cred, setCred] = useState(null);
+
+  async function reissue(id) {
+    try {
+      const res = await api.post(`/users/${id}/invite`, {});
+      setCred(res.credentials);
+      flash(res.credentials.sent ? 'Credentials emailed.' : 'Credentials generated.');
+    } catch (e) { fail(e); }
+  }
+
+  return (
+    <>
+      <AddPerson onChange={onChange} flash={flash} fail={fail} />
+      <div className="card">
+        <h3>All people <span className="muted small">({users.length})</span></h3>
+        <CredentialsBanner cred={cred} />
+        <div className="table-wrap">
+          <table className="table">
+            <thead><tr><th>Name</th><th>Role</th><th>Roll / ID</th><th>Email</th><th>Sem/Sec</th><th>Account</th><th></th></tr></thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td>{u.name}</td><td><span className="badge role">{u.role}</span></td>
+                  <td className="mono small">{u.roll_no || '—'}</td>
+                  <td className="small">{u.email}</td>
+                  <td className="small">{u.role === 'student' ? `${u.semester || '—'} / ${u.section || '-'}` : '—'}</td>
+                  <td>
+                    {u.has_password
+                      ? <span className="badge approved">active</span>
+                      : <span className="badge pending">no password</span>}
+                  </td>
+                  <td>
+                    {u.role !== 'admin' && (
+                      <button className="link" onClick={() => reissue(u.id)}>
+                        {u.has_password ? 'Reset password' : 'Send credentials'}
+                      </button>
+                    )}
+                    {u.id !== meId && <button className="link danger" onClick={() => onRemove(u.id)} style={{ marginLeft: 8 }}>Delete</button>}
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && <tr><td colSpan="7" className="center muted">No users yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }

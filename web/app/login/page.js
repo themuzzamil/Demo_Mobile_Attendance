@@ -6,7 +6,7 @@ import { api, setSession, homePathFor } from '@/lib/clientApi';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -16,7 +16,7 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
-      const { token, user } = await api.post('/auth/login', { email, password });
+      const { token, user } = await api.post('/auth/login', { identifier, password });
       setSession(token, user);
       router.replace(homePathFor(user));
     } catch (err) {
@@ -35,8 +35,9 @@ export default function LoginPage() {
         {error && <div className="alert error">{error}</div>}
         <form onSubmit={submit}>
           <div className="field">
-            <label>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <label>Roll number / ID or email</label>
+            <input type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
+                   placeholder="e.g. 00001 or you@email.com" autoCapitalize="none" required />
           </div>
           <div className="field">
             <label>Password</label>
@@ -47,7 +48,7 @@ export default function LoginPage() {
           </button>
         </form>
         <p className="muted small center" style={{ marginTop: '1rem', marginBottom: 0 }}>
-          Don&apos;t have an account? <Link href="/signup">Create one</Link>
+          Can&apos;t sign in? <Link href="/request-access">Get my credentials by email</Link>
         </p>
       </div>
     </div>

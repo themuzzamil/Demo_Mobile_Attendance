@@ -4,15 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, setSession, homePathFor } from '@/lib/clientApi';
 
-const ROLES = [
-  { key: 'student', label: 'Student' },
-  { key: 'teacher', label: 'Teacher' },
-  { key: 'admin', label: 'Admin' },
-];
-
+// Bootstrap only: creates the FIRST administrator. Once an admin exists the API
+// closes this route (403) — teachers/students are provisioned by an admin and
+// get a set-password link by email.
 export default function SignupPage() {
   const router = useRouter();
-  const [role, setRole] = useState('student');
   const [form, setForm] = useState({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,7 +20,7 @@ export default function SignupPage() {
     setError('');
     setBusy(true);
     try {
-      const { token, user } = await api.post('/auth/signup', { role, ...form });
+      const { token, user } = await api.post('/auth/signup', { role: 'admin', ...form });
       setSession(token, user);
       router.replace(homePathFor(user));
     } catch (err) {
@@ -38,19 +34,12 @@ export default function SignupPage() {
     <div className="auth-wrap">
       <div className="auth-card">
         <div className="brand">Attend<span>Net</span></div>
-        <p className="muted small">Create your account</p>
-
-        <div className="tabs" style={{ marginTop: '1rem' }}>
-          {ROLES.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              className={role === r.key ? 'active' : ''}
-              onClick={() => { setRole(r.key); setError(''); }}
-            >
-              {r.label}
-            </button>
-          ))}
+        <p className="muted small">First-time setup</p>
+        <h3 style={{ marginTop: '1rem' }}>Create the administrator account</h3>
+        <div className="alert info small">
+          This page only works once, to create the first admin. After that,
+          teachers and students are added by the admin and receive their login ID
+          and password by email.
         </div>
 
         {error && <div className="alert error">{error}</div>}
@@ -64,47 +53,12 @@ export default function SignupPage() {
             <label>Email</label>
             <input type="email" value={form.email || ''} onChange={(e) => set('email', e.target.value)} required />
           </div>
-
-          {(role === 'teacher' || role === 'student') && (
-            <div className="field">
-              <label>Subject</label>
-              <input value={form.subject || ''} onChange={(e) => set('subject', e.target.value)} required
-                placeholder="e.g. Information Security" />
-            </div>
-          )}
-
-          {role === 'student' && (
-            <div className="grid2">
-              <div className="field">
-                <label>Semester</label>
-                <input value={form.semester || ''} onChange={(e) => set('semester', e.target.value)} required placeholder="e.g. 3" />
-              </div>
-              <div className="field">
-                <label>Section</label>
-                <input value={form.section || ''} onChange={(e) => set('section', e.target.value)} required placeholder="e.g. B" />
-              </div>
-              <div className="field" style={{ gridColumn: '1 / -1' }}>
-                <label>Roll number</label>
-                <input value={form.roll_no || ''} onChange={(e) => set('roll_no', e.target.value)} required placeholder="e.g. BSCS-21-045" />
-              </div>
-            </div>
-          )}
-
           <div className="field">
             <label>Password</label>
             <input type="password" value={form.password || ''} onChange={(e) => set('password', e.target.value)} required minLength={6} />
           </div>
-
-          {role !== 'admin' && (
-            <div className="alert info small">
-              {role === 'teacher'
-                ? 'Teacher accounts require admin approval before you can take attendance.'
-                : 'Student accounts require approval by a teacher of your subject before you can mark attendance.'}
-            </div>
-          )}
-
           <button type="submit" disabled={busy} style={{ width: '100%' }}>
-            {busy ? 'Creating account…' : 'Create account'}
+            {busy ? 'Creating…' : 'Create administrator'}
           </button>
         </form>
 

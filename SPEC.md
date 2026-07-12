@@ -12,12 +12,33 @@ source of truth for the build.
 
 | Role | Core job | Key actions |
 |------|----------|-------------|
-| **Admin** | Set up structure, resolve escalations, oversee everything | Approve teachers; build weekly **timetable** (subject, teacher, section, start time, **lecture duration**, **marking window**); approve **teacher late-start** requests; read **all** logs/reports; receive in-site **messages**. |
+| **Admin** | Set up structure, resolve escalations, oversee everything | **Add teachers & students** (they receive a set-password link by email); define **courses** (each tagged to a semester 1–8) and **offerings**; **enroll** students into their semester's offerings; build weekly **timetable** (offering, day, start time, **lecture duration**, **marking window**, **grace**); approve **teacher late-start** requests; read **all** logs/reports; receive in-site **messages**. |
 | **Teacher** | Run the lecture, be present, gatekeep late students | **Start class** at scheduled time (= own attendance); approve **student late-mark** requests; **end an empty session** (optional, after 10 min, *by writing a message to admin*); view own roster/history. |
 | **Student** | Mark presence on the class network within the window | **Mark present** (public-IP verified); **request teacher permission** if late; view own attendance %. |
 
 > **Number of admins:** not locked to one for now (to be decided later). The
 > system is designed so all teacher escalations and notices route to admin(s).
+
+### Account provisioning (no self-signup)
+Accounts are **created by an admin**, not self-registered.
+
+1. The first admin is created **once** via `/signup` (the route 403s once any admin
+   exists).
+2. Admin adds a teacher/student (`POST /api/users`) with just name/email (+ semester
+   & section for students). The account is created `approved`; a **login id and
+   password are auto-generated**:
+   - **roll number** for students — 5 digits, `00001`, `00002`, …
+   - **teacher id** for teachers — 4 digits, `0001`, `0002`, …
+   The id lives in `users.roll_no` (globally unique) and is allocated by digit-width.
+3. The credentials (login id + password) are **emailed** to the user. Login accepts
+   the **roll no / teacher id OR the email** + password.
+4. The user changes their password from their dashboard **Account** tab
+   (`POST /api/auth/change-password`). If they lose it, `/request-access` emails a
+   **fresh** password (the old one stops working; responds generically to avoid
+   **account enumeration**); the admin can also re-issue from **People**.
+5. Passwords are stored **bcrypt-hashed**; the plaintext exists only in the one
+   email. If email isn't configured, the generated credentials are returned to the
+   trusted admin in the dashboard to share manually.
 
 ---
 
@@ -95,8 +116,21 @@ approval can't be reused for another lecture/day.
 Existing tables (`users`, `attendance_sessions`, `attendance`, `audit_logs`) are
 extended; new tables added. All migrations are idempotent.
 
-### users (existing)
-Roles `admin|teacher|student`, approval `status`, profile fields. Unchanged.
+### users (extended)
+Roles `admin|teacher|student`, `status`, profile fields. `password_hash` is now
+**nullable** (NULL = admin-provisioned, invite pending). Students carry `semester`
+(1–8), `section`, `roll_no`; `subject` is no longer collected for new accounts.
+
+### auth_tokens (deprecated)
+Introduced for the earlier emailed set-password **link** flow, now replaced by the
+emailed-credentials flow. The table may still exist in migrated DBs but is unused.
+
+### courses (extended)
+```
++ semester SMALLINT   -- 1..8; the semester this course belongs to
+```
+Offerings inherit the course's semester; the enroll UI filters offerings by the
+selected student's semester.
 
 ### classes (new) — a teachable unit (roster anchor)
 ```
@@ -162,6 +196,12 @@ Every sensitive action recorded with IP. Admin can read/filter all of it.
 
 | Method & path | Role | Purpose |
 |---|---|---|
+| `POST /api/auth/signup` | public | Bootstrap the **first admin** only (403 afterwards) |
+| `POST /api/users` | admin | **Provision** a teacher/student (no password) + email set-password link |
+| `POST /api/users/[id]/invite` | admin | Re-issue a user's credentials (new password, emailed) |
+| `GET /api/users/[id]` | admin | A student's enrolled offering ids (for the enroll UI) |
+| `POST /api/auth/request-access` | public | Email me fresh credentials (enumeration-safe) |
+| `POST /api/auth/change-password` | any | Change your own password (current + new) |
 | `POST /api/classes` · `GET /api/classes` | admin | Create/list classes |
 | `POST /api/classes/[id]/enroll` · `DELETE …/enroll` | admin/teacher | Manage roster |
 | `POST /api/timetable` · `GET /api/timetable` · `DELETE …` | admin | Manage weekly slots |
@@ -181,6 +221,8 @@ Every sensitive action recorded with IP. Admin can read/filter all of it.
 - **Server clock authority** for all windows (UTC).
 - **Public-IP match** is one signal (spoofable via VPN/hotspot). Roadmap: rotating
   QR/PIN second factor for stronger presence proof.
+- Passwords **bcrypt-hashed**; auto-generated at provisioning and on reset; a reset
+  **invalidates the old password**; `/request-access` is **enumeration-safe**.
 - **Single-use** permissions prevent replay.
 - **Audit everything**; admin-only oversight is role-scoped.
 - Rotate the Neon DB password and the Vercel token used during initial deploy.

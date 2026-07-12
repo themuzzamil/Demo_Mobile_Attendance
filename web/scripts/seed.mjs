@@ -67,16 +67,18 @@ async function main() {
   if (realStudent) studentIds.push(realStudent);
 
   // --- courses -----------------------------------------------------------
+  // Seeded students are all semester 6, so seed these courses into semester 6 so
+  // they appear in the semester-filtered enroll UI for those students.
   const courseDefs = [
-    ['CS-301', 'Information Security', 3],
-    ['CS-302', 'Operating Systems', 3],
-    ['CS-303', 'Database Systems', 3],
-    ['SE-310', 'Software Engineering', 3],
-    ['CS-305', 'Mobile Computing', 3],
+    ['CS-301', 'Information Security', 6, 3],
+    ['CS-302', 'Operating Systems', 6, 3],
+    ['CS-303', 'Database Systems', 6, 3],
+    ['SE-310', 'Software Engineering', 6, 3],
+    ['CS-305', 'Mobile Computing', 6, 3],
   ];
   const courses = {};
-  for (const [code, title, cr] of courseDefs) {
-    const r = await q(`INSERT INTO courses (code,title,credit_hours) VALUES ($1,$2,$3) RETURNING id`, [code, title, cr]);
+  for (const [code, title, sem, cr] of courseDefs) {
+    const r = await q(`INSERT INTO courses (code,title,semester,credit_hours) VALUES ($1,$2,$3,$4) RETURNING id`, [code, title, sem, cr]);
     courses[code] = r.rows[0].id;
   }
   console.log(`• ${Object.keys(courses).length} courses`);

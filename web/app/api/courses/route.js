@@ -16,7 +16,7 @@ export async function GET(request) {
   return NextResponse.json({ courses: rows });
 }
 
-// POST (admin): add a course to the catalog. Body: { code, title, credit_hours? }
+// POST (admin): add a course to the catalog. Body: { code, title, semester, credit_hours? }
 export async function POST(request) {
   const { user, error, status } = requireApproved(request, 'admin');
   if (error) return NextResponse.json({ error }, { status });
@@ -24,13 +24,17 @@ export async function POST(request) {
   const code = (b.code || '').trim().toUpperCase();
   const title = (b.title || '').trim();
   const credit = b.credit_hours ? Number(b.credit_hours) : null;
+  const semNum = Number(b.semester);
   if (!code || !title) {
     return NextResponse.json({ error: 'Course code and title are required' }, { status: 400 });
   }
+  if (!b.semester || !Number.isInteger(semNum) || semNum < 1 || semNum > 8) {
+    return NextResponse.json({ error: 'Semester must be a number 1–8' }, { status: 400 });
+  }
   try {
     const { rows } = await query(
-      `INSERT INTO courses (code, title, credit_hours, created_by) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [code, title, credit, user.id]
+      `INSERT INTO courses (code, title, semester, credit_hours, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [code, title, semNum, credit, user.id]
     );
     await audit(request, user.id, 'course.create', { courseId: rows[0].id, code });
     return NextResponse.json({ course: rows[0] }, { status: 201 });

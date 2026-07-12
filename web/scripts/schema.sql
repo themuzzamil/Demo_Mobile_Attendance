@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   role          TEXT NOT NULL CHECK (role IN ('admin', 'teacher', 'student')),
   name          TEXT NOT NULL,
   email         TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
+  -- Nullable: admin-provisioned accounts exist before the user sets a password
+  -- (via a one-time set-password link). NULL means "invite pending".
+  password_hash TEXT,
   status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   -- profile fields (role-dependent; null where not applicable)
   subject       TEXT,           -- teacher, student
@@ -79,6 +81,7 @@ CREATE TABLE IF NOT EXISTS courses (
   id           SERIAL PRIMARY KEY,
   code         TEXT NOT NULL UNIQUE,        -- e.g. "CS-301"
   title        TEXT NOT NULL,               -- e.g. "Information Security"
+  semester     SMALLINT,                    -- 1..8: the semester this course belongs to
   credit_hours INTEGER,
   created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- admin
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -159,7 +162,26 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_user_id, is_read);
 
+-- v5 — one-time tokens for the set-password / password-reset link. We store only
+-- a SHA-256 hash of the raw token (never the token itself), so a DB leak can't be
+-- used to hijack an invite. Same 'set_password' flow serves both first-time setup
+-- and later resets.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash  TEXT NOT NULL UNIQUE,        -- sha256(raw token)
+  purpose     TEXT NOT NULL DEFAULT 'set_password' CHECK (purpose IN ('set_password')),
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON auth_tokens(user_id);
+
 -- --- Idempotent column additions to existing v2 tables --------------------
+-- Allow invite-pending accounts (no password yet) on already-migrated DBs.
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+-- Tag each course with the semester it belongs to (1..8).
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS semester SMALLINT;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS slot_id INTEGER REFERENCES timetable_slots(id) ON DELETE SET NULL;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS scheduled_start TIMESTAMPTZ;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS attendance_until TIMESTAMPTZ;

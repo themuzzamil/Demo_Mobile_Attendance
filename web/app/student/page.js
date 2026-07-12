@@ -2,27 +2,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
-import PendingScreen from '@/app/components/PendingScreen';
 import MessagesInbox from '@/app/components/MessagesInbox';
 import Countdown from '@/app/components/Countdown';
+import AccountPanel from '@/app/components/AccountPanel';
 import { api, getPublicIp } from '@/lib/clientApi';
+import { useTab } from '@/lib/useTab';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function StudentPage() {
-  return (
-    <Shell role="student">
-      {(user, setUser) =>
-        user.status !== 'approved'
-          ? <PendingScreen user={user} onUpdate={setUser} />
-          : <StudentHome user={user} />
-      }
-    </Shell>
-  );
+  return <Shell role="student">{(user) => <StudentHome user={user} />}</Shell>;
 }
 
 function StudentHome({ user }) {
-  const [tab, setTab] = useState('mark');
+  const [tab, setTab] = useTab('mark');
   const [session, setSession] = useState(null);
   const [alreadyMarked, setAlreadyMarked] = useState(null);
   const [windowClosed, setWindowClosed] = useState(false);
@@ -89,6 +82,7 @@ function StudentHome({ user }) {
     { id: 'schedule', label: 'Schedule', icon: 'timetable' },
     { id: 'inbox', label: 'Inbox', icon: 'inbox', count: unread },
     { id: 'history', label: 'History', icon: 'records' },
+    { id: 'account', label: 'Account', icon: 'users' },
   ];
 
   return (
@@ -166,6 +160,8 @@ function StudentHome({ user }) {
       )}
 
       {tab === 'inbox' && <MessagesInbox onUnread={setUnread} />}
+
+      {tab === 'account' && <AccountPanel user={user} />}
 
       {tab === 'history' && (
         <div className="card">

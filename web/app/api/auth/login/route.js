@@ -8,15 +8,26 @@ export const runtime = 'nodejs';
 
 export async function POST(request) {
   const b = (await request.json().catch(() => ({}))) || {};
-  const email = (b.email || '').trim().toLowerCase();
+  // Accept a roll number / teacher id OR an email as the identifier.
+  const identifier = (b.identifier ?? b.email ?? '').trim();
   const password = b.password || '';
-  if (!email || !password) {
-    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+  if (!identifier || !password) {
+    return NextResponse.json({ error: 'Your ID/email and password are required' }, { status: 400 });
   }
-  const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+  const { rows } = await query(
+    'SELECT * FROM users WHERE lower(email) = lower($1) OR roll_no = $1',
+    [identifier]
+  );
   const user = rows[0];
+  // Provisioned account whose password hasn't been issued yet (rare edge case).
+  if (user && !user.password_hash) {
+    return NextResponse.json(
+      { error: 'Your account has no password yet. Use "Get my credentials" to receive one by email.' },
+      { status: 403 }
+    );
+  }
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-    await audit(request, null, 'auth.login_failed', { email });
+    await audit(request, null, 'auth.login_failed', { identifier });
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
   }
   if (user.status === 'rejected') {

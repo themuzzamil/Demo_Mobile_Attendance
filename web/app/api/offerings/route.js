@@ -14,7 +14,7 @@ export async function GET(request) {
   let where = 'WHERE o.active = TRUE';
   if (user.role === 'teacher') { params.push(user.id); where += ` AND o.teacher_id = $${params.length}`; }
   const { rows } = await query(
-    `SELECT o.*, c.code, c.title, u.name AS teacher_name,
+    `SELECT o.*, c.code, c.title, c.semester AS course_semester, u.name AS teacher_name,
             (SELECT COUNT(*) FROM enrollments e WHERE e.offering_id = o.id) AS student_count
        FROM course_offerings o
        JOIN courses c ON c.id = o.course_id
@@ -27,7 +27,8 @@ export async function GET(request) {
 }
 
 // POST (admin): create an offering (a teacher teaching a course-section in a term).
-// Body: { course_id, teacher_id, term, semester?, section? }
+// Semester is inherited from the course (one semester per course), not free-typed.
+// Body: { course_id, teacher_id, term, section? }
 export async function POST(request) {
   const { user, error, status } = requireApproved(request, 'admin');
   if (error) return NextResponse.json({ error }, { status });
@@ -35,13 +36,13 @@ export async function POST(request) {
   const courseId = Number(b.course_id);
   const teacherId = b.teacher_id ? Number(b.teacher_id) : null;
   const term = (b.term || '').trim();
-  const semester = (b.semester || '').trim() || null;
   const section = (b.section || '').trim() || null;
   if (!courseId || !term) {
     return NextResponse.json({ error: 'course_id and term are required' }, { status: 400 });
   }
-  const course = await query('SELECT 1 FROM courses WHERE id = $1', [courseId]);
+  const course = await query('SELECT semester FROM courses WHERE id = $1', [courseId]);
   if (course.rowCount === 0) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
+  const semester = course.rows[0].semester != null ? String(course.rows[0].semester) : null;
   if (teacherId) {
     const t = await query("SELECT 1 FROM users WHERE id = $1 AND role = 'teacher'", [teacherId]);
     if (t.rowCount === 0) return NextResponse.json({ error: 'teacher_id is not a valid teacher' }, { status: 400 });
