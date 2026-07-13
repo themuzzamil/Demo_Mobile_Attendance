@@ -20,7 +20,6 @@ function StudentHome({ user }) {
   const [session, setSession] = useState(null);
   const [alreadyMarked, setAlreadyMarked] = useState(null);
   const [windowClosed, setWindowClosed] = useState(false);
-  const [needsPermission, setNeedsPermission] = useState(false);
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState([]);
   const [schedule, setSchedule] = useState([]);
@@ -55,25 +54,18 @@ function StudentHome({ user }) {
       const ip = publicIp || (await getPublicIp());
       setPublicIp(ip);
       const r = await api.post('/attendance/check-in', { network_ip: ip });
-      flash(r.late ? 'Marked present (late, approved by teacher).' : 'Attendance marked: you are present.');
-      setNeedsPermission(false);
+      flash(r.late
+        ? 'Submitted after the window — waiting for your teacher to approve (counts as late).'
+        : 'Submitted — waiting for your teacher to approve your attendance.');
       await loadSession(); await loadHistory(); await loadSummary();
     } catch (e) {
-      if (e.message && /request permission/i.test(e.message)) setNeedsPermission(true);
       fail(e); await loadSession();
     } finally { setBusy(false); }
   }
 
-  async function requestPermission() {
-    if (!session) return;
-    const reason = window.prompt('Reason for marking late (sent to your teacher):', '') ?? '';
-    try {
-      await api.post('/permissions', { type: 'student_late_mark', session_id: session.id, reason });
-      flash('Request sent to your teacher. Once approved, tap "Mark me present" again.');
-    } catch (e) { fail(e); }
-  }
-
-  const marked = alreadyMarked === 'present' || alreadyMarked === 'late';
+  // "acted" = the student has already submitted for this session (any status).
+  const acted = alreadyMarked === 'present' || alreadyMarked === 'late' || alreadyMarked === 'pending';
+  const rejected = alreadyMarked === 'denied';
   const byDay = DAYS.map((d, i) => ({ day: d, items: schedule.filter((s) => s.day_of_week === i) })).filter((g) => g.items.length);
 
   // Soonest enrolled class today that hasn't started — drives the countdown/hint.
@@ -107,7 +99,7 @@ function StudentHome({ user }) {
         <div className="card hero">
           <div className="row between wrap">
             <h3 style={{ margin: 0 }}>Mark attendance</h3>
-            {session && !marked && <Countdown until={session.attendance_until} prefix="marking" closedLabel="marking closed" />}
+            {session && !acted && <Countdown until={session.attendance_until} prefix="marking" closedLabel="marking closed" />}
           </div>
           <p className="small muted mt">Your network: <span className="ip-pill">{publicIp || 'detecting…'}</span></p>
           {!session && (upcoming ? (
@@ -119,14 +111,21 @@ function StudentHome({ user }) {
           ) : (
             <div className="alert info">No class is live right now. When your teacher starts a class, a <strong>Mark me present</strong> button appears here.</div>
           ))}
-          {session && marked && <div className="alert ok">You are marked <strong>{alreadyMarked}</strong> for <strong>{session.subject}</strong>.</div>}
-          {session && !marked && (
+          {session && alreadyMarked === 'pending' && (
+            <div className="alert warn">Submitted for <strong>{session.subject}</strong> — waiting for your teacher to approve. You&apos;ll show as <strong>present</strong> once they confirm.</div>
+          )}
+          {session && (alreadyMarked === 'present' || alreadyMarked === 'late') && (
+            <div className="alert ok">Your teacher approved your attendance — you are marked <strong>{alreadyMarked}</strong> for <strong>{session.subject}</strong>.</div>
+          )}
+          {session && rejected && (
+            <div className="alert error">Your mark for <strong>{session.subject}</strong> was not approved. If you are in class, tap <strong>Mark me present</strong> again.</div>
+          )}
+          {session && (!acted) && (
             <>
-              <div className="alert info">Live: <strong>{session.subject}</strong> by {session.teacher_name}. You must be on the class network to be marked present.</div>
-              {windowClosed && <div className="alert warn">The marking window has closed. Request permission from your teacher, then mark once approved.</div>}
+              <div className="alert info">Live: <strong>{session.subject}</strong> by {session.teacher_name}. Tap below — your teacher then confirms you are present.</div>
+              {windowClosed && <div className="alert warn">The marking window has closed. You can still submit; it will be recorded as <strong>late</strong> pending your teacher&apos;s approval.</div>}
               <div className="row wrap">
-                <button onClick={markPresent} disabled={busy} className="success">{busy ? 'Marking…' : 'Mark me present'}</button>
-                {(windowClosed || needsPermission) && <button onClick={requestPermission} className="secondary">Request teacher permission</button>}
+                <button onClick={markPresent} disabled={busy} className="success">{busy ? 'Submitting…' : 'Mark me present'}</button>
               </div>
             </>
           )}

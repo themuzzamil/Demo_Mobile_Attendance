@@ -17,7 +17,9 @@ export async function GET(request) {
               (SELECT COUNT(*) FROM attendance a
                 WHERE a.session_id = s.id AND a.attendee_role='student' AND a.status='present') AS present_count,
               (SELECT COUNT(*) FROM attendance a
-                WHERE a.session_id = s.id AND a.attendee_role='student' AND a.status='late') AS late_count
+                WHERE a.session_id = s.id AND a.attendee_role='student' AND a.status='late') AS late_count,
+              (SELECT COUNT(*) FROM attendance a
+                WHERE a.session_id = s.id AND a.attendee_role='student' AND a.status='pending') AS pending_count
          FROM attendance_sessions s
         WHERE s.teacher_id = $1 AND s.is_open = TRUE
         ORDER BY s.opened_at DESC LIMIT 1`,

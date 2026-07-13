@@ -5,6 +5,7 @@ import DashboardLayout from '@/app/components/DashboardLayout';
 import Countdown from '@/app/components/Countdown';
 import StartingSoon from '@/app/components/StartingSoon';
 import AccountPanel from '@/app/components/AccountPanel';
+import ClassReports from '@/app/components/ClassReports';
 import { api, getPublicIp } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
 
@@ -71,6 +72,7 @@ function TeacherHome({ user }) {
   const nav = [
     { id: 'today', label: "Today's classes", icon: 'play' },
     { id: 'requests', label: 'Requests', icon: 'bell', count: pendingRequests.length },
+    { id: 'reports', label: 'Reports', icon: 'chart' },
     { id: 'records', label: 'Records', icon: 'records' },
     { id: 'account', label: 'Account', icon: 'users' },
   ];
@@ -82,7 +84,8 @@ function TeacherHome({ user }) {
 
       {session && (
         <ActiveSession session={session} busy={busy} setBusy={setBusy}
-          onClosed={() => { loadSession(); loadToday(); loadRecords(); }} flash={flash} fail={fail} />
+          onClosed={() => { loadSession(); loadToday(); loadRecords(); }}
+          onDecided={() => { loadSession(); loadRecords(); }} flash={flash} fail={fail} />
       )}
 
       {!session && upcoming && (
@@ -144,6 +147,8 @@ function TeacherHome({ user }) {
         </div>
       )}
 
+      {tab === 'reports' && <ClassReports role="teacher" flash={flash} fail={fail} />}
+
       {tab === 'records' && (
         <div className="card">
           <div className="row between">
@@ -177,10 +182,34 @@ function TeacherHome({ user }) {
   );
 }
 
-function ActiveSession({ session, busy, setBusy, onClosed, flash, fail }) {
+function ActiveSession({ session, busy, setBusy, onClosed, onDecided, flash, fail }) {
   const [endMsg, setEndMsg] = useState('');
   const [showEnd, setShowEnd] = useState(false);
-  const noStudents = Number(session.present_count) === 0 && Number(session.late_count) === 0;
+  const [pending, setPending] = useState([]);
+  const noStudents = Number(session.present_count) === 0 && Number(session.late_count) === 0 && Number(session.pending_count || 0) === 0;
+
+  const loadPending = useCallback(async () => {
+    try {
+      const r = await api.get(`/attendance?session_id=${session.id}&status=pending`);
+      setPending(r.attendance);
+    } catch (e) { fail(e); }
+  }, [session.id, fail]);
+
+  useEffect(() => {
+    loadPending();
+    const t = setInterval(loadPending, 10000);
+    return () => clearInterval(t);
+  }, [loadPending]);
+
+  async function decide(body, label) {
+    setBusy(true);
+    try {
+      const r = await api.post('/attendance/decide', body);
+      flash(`${label} — ${r.decided} student(s).`);
+      await loadPending();
+      onDecided?.();
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  }
 
   async function close(message) {
     setBusy(true);
@@ -204,8 +233,39 @@ function ActiveSession({ session, busy, setBusy, onClosed, flash, fail }) {
       <div className="stat mt">
         <div className="item"><div className="n">{session.present_count}</div><div className="l">Present</div></div>
         <div className="item"><div className="n">{session.late_count}</div><div className="l">Late</div></div>
+        <div className="item"><div className="n">{pending.length}</div><div className="l">Pending</div></div>
       </div>
       <p className="small muted mt">Network <span className="ip-pill">{session.network_ip}</span> · you are marked <span className={`badge ${session.teacher_status}`}>{session.teacher_status}</span></p>
+
+      <div className="mt" style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.9rem' }}>
+        <div className="row between wrap">
+          <strong className="small">Waiting for your approval <span className="muted">({pending.length})</span></strong>
+          {pending.length > 0 && (
+            <div className="row wrap">
+              <button className="success sm" disabled={busy}
+                onClick={() => decide({ session_id: session.id, all: true, decision: 'approve' }, 'Approved all')}>Approve all</button>
+              <button className="ghost sm" disabled={busy}
+                onClick={() => decide({ session_id: session.id, all: true, decision: 'reject' }, 'Rejected all')}>Reject all</button>
+            </div>
+          )}
+        </div>
+        <p className="small muted" style={{ marginTop: 4 }}>Students who tapped “present”. Verify each is in class, then approve. IP match is only a hint.</p>
+        {pending.length === 0 ? (
+          <p className="muted small" style={{ margin: 0 }}>No students waiting right now.</p>
+        ) : (
+          <ul className="list">
+            {pending.map((p) => (
+              <li key={p.id}>
+                <div><strong>{p.student_name}</strong> <span className="muted small">{p.roll_no || ''} · Sec {p.section || '—'}</span>
+                  <div className="small muted">IP match: {p.ip_ok ? 'Yes' : 'No'} · {p.ip_address || '—'}</div></div>
+                <div className="spacer" />
+                <button className="success sm" disabled={busy} onClick={() => decide({ id: p.id, decision: 'approve' }, 'Approved')}>Approve</button>
+                <button className="ghost sm" disabled={busy} onClick={() => decide({ id: p.id, decision: 'reject' }, 'Reject')}>Reject</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {showEnd ? (
         <div className="mt">

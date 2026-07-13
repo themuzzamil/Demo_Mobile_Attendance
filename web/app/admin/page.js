@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell from '@/app/components/Shell';
 import DashboardLayout from '@/app/components/DashboardLayout';
+import ClassReports from '@/app/components/ClassReports';
 import { api } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
 
@@ -69,6 +70,7 @@ function AdminHome({ user }) {
     { id: 'offerings', label: 'Offerings', icon: 'offering' },
     { id: 'enroll', label: 'Enroll', icon: 'approvals' },
     { id: 'timetable', label: 'Timetable', icon: 'timetable' },
+    { id: 'reports', label: 'Reports', icon: 'chart' },
     { id: 'requests', label: 'Requests', icon: 'bell', count: pendingRequests.length },
   ];
 
@@ -91,6 +93,7 @@ function AdminHome({ user }) {
         <Enroll students={students} offerings={offerings} onChange={loadOfferings} flash={flash} fail={fail} />
       )}
       {tab === 'timetable' && <Timetable slots={slots} offerings={offerings} onChange={loadSlots} flash={flash} fail={fail} />}
+      {tab === 'reports' && <ClassReports role="admin" flash={flash} fail={fail} />}
       {tab === 'requests' && <Requests requests={requests} onDecide={decideRequest} />}
     </DashboardLayout>
   );

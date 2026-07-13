@@ -46,12 +46,15 @@ CREATE TABLE IF NOT EXISTS attendance (
   id          SERIAL PRIMARY KEY,
   session_id  INTEGER NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
   student_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  status      TEXT NOT NULL CHECK (status IN ('present', 'denied', 'late', 'absent')),
+  -- 'pending' = student marked, waiting on the teacher's manual approval.
+  status      TEXT NOT NULL CHECK (status IN ('present', 'denied', 'late', 'absent', 'pending')),
   attendee_role TEXT NOT NULL DEFAULT 'student' CHECK (attendee_role IN ('student', 'teacher')),
-  ip_address  TEXT,                   -- student's detected public IP (used for match)
+  ip_address  TEXT,                   -- student's detected public IP (a hint, not a gate)
   server_ip   TEXT,                   -- server-seen IP (audit)
   ip_ok       BOOLEAN,
   reason      TEXT,
+  approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- teacher/admin who decided
+  decided_at  TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (session_id, student_id)
 );
@@ -191,7 +194,14 @@ ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS ended_reason TEXT;
 ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS offering_id INTEGER REFERENCES course_offerings(id) ON DELETE SET NULL;
 
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS attendee_role TEXT NOT NULL DEFAULT 'student';
--- Widen the status CHECK to allow 'late' and 'absent' on already-existing DBs.
+
+-- v6 — teacher approval: every student mark lands as 'pending' and the teacher
+-- manually verifies + approves it (the IP match is only a hint, since class
+-- Wi-Fi ranges can legitimately differ). Widen the CHECK to allow 'pending' and
+-- record who/when approved. Additive + idempotent.
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
+-- Widen the status CHECK to allow 'late', 'absent' and 'pending' on existing DBs.
 ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check;
 ALTER TABLE attendance ADD CONSTRAINT attendance_status_check
-  CHECK (status IN ('present', 'denied', 'late', 'absent'));
+  CHECK (status IN ('present', 'denied', 'late', 'absent', 'pending'));
