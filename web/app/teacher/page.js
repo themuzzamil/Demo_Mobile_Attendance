@@ -6,6 +6,7 @@ import Countdown from '@/app/components/Countdown';
 import StartingSoon from '@/app/components/StartingSoon';
 import AccountPanel from '@/app/components/AccountPanel';
 import ClassReports from '@/app/components/ClassReports';
+import ClassQr from '@/app/components/ClassQr';
 import { api, getPublicIp } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
 
@@ -236,6 +237,11 @@ function ActiveSession({ session, busy, setBusy, onClosed, onDecided, flash, fai
         <div className="item"><div className="n">{pending.length}</div><div className="l">Pending</div></div>
       </div>
       <p className="small muted mt">Network <span className="ip-pill">{session.network_ip}</span> · you are marked <span className={`badge ${session.teacher_status}`}>{session.teacher_status}</span></p>
+
+      <div className="mt" style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.9rem' }}>
+        <strong className="small">Show this to the class</strong>
+        <ClassQr sessionId={session.id} fail={fail} />
+      </div>
 
       <div className="mt" style={{ borderTop: '1px dashed var(--border)', paddingTop: '0.9rem' }}>
         <div className="row between wrap">

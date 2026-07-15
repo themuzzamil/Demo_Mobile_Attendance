@@ -631,6 +631,13 @@ function Users({ users, meId, onRemove, onChange, flash, fail }) {
     } catch (e) { fail(e); }
   }
 
+  // Unbind a student's phone (e.g. they got a new one) so their next mark re-binds.
+  async function resetDevice(id) {
+    if (!confirm('Reset this student\'s registered device? Their next attendance mark will bind whatever device they use.')) return;
+    try { await api.post(`/users/${id}/reset-device`, {}); flash('Device binding reset.'); onChange(); }
+    catch (e) { fail(e); }
+  }
+
   return (
     <>
       <AddPerson onChange={onChange} flash={flash} fail={fail} />
@@ -639,7 +646,7 @@ function Users({ users, meId, onRemove, onChange, flash, fail }) {
         <CredentialsBanner cred={cred} />
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Name</th><th>Role</th><th>Roll / ID</th><th>Email</th><th>Sem/Sec</th><th>Account</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Role</th><th>Roll / ID</th><th>Email</th><th>Sem/Sec</th><th>Account</th><th>Device</th><th></th></tr></thead>
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
@@ -653,6 +660,12 @@ function Users({ users, meId, onRemove, onChange, flash, fail }) {
                       : <span className="badge pending">no password</span>}
                   </td>
                   <td>
+                    {u.role !== 'student' ? <span className="muted small">—</span>
+                      : u.has_device
+                        ? <button className="link" onClick={() => resetDevice(u.id)} title="Unbind this student's phone">registered · reset</button>
+                        : <span className="muted small">none yet</span>}
+                  </td>
+                  <td>
                     {u.role !== 'admin' && (
                       <button className="link" onClick={() => reissue(u.id)}>
                         {u.has_password ? 'Reset password' : 'Send credentials'}
@@ -662,7 +675,7 @@ function Users({ users, meId, onRemove, onChange, flash, fail }) {
                   </td>
                 </tr>
               ))}
-              {users.length === 0 && <tr><td colSpan="7" className="center muted">No users yet.</td></tr>}
+              {users.length === 0 && <tr><td colSpan="8" className="center muted">No users yet.</td></tr>}
             </tbody>
           </table>
         </div>

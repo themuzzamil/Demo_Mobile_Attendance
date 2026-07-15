@@ -76,19 +76,36 @@ export async function sendEmail({ to, subject, html, text }) {
   return { sent: false };
 }
 
+// Timestamp shown in credential emails, in Pakistan time — this is what lets a
+// user with several of these emails tell which password is the live one.
+const stamp = (d) =>
+  new Date(d).toLocaleString('en-PK', {
+    timeZone: 'Asia/Karachi', dateStyle: 'medium', timeStyle: 'short',
+  });
+
 // Credentials email: the user's login id and a (temporary) password. `idLabel`
 // is "Roll number" for students / "Teacher ID" for teachers. `firstTime` tweaks
 // the wording between account creation and a re-issue/reset.
-export async function sendCredentialsEmail({ to, name, idLabel, loginId, password, loginUrl, firstTime = true }) {
-  const subject = firstTime ? 'Your AttendNet account is ready' : 'Your new AttendNet password';
+//
+// Issuing a password invalidates every earlier one, and users often have several
+// of these mails in the inbox, so the subject and body are stamped with the issue
+// time and say plainly that older mails are dead.
+export async function sendCredentialsEmail({ to, name, idLabel, loginId, password, loginUrl, firstTime = true, issuedAt = new Date() }) {
+  const at = stamp(issuedAt);
+  const subject = firstTime
+    ? `Your AttendNet account is ready (${at})`
+    : `Your new AttendNet password (${at})`;
   const lead = firstTime
     ? `An administrator created an AttendNet account for you. Here are your sign-in details.`
-    : `Here are your new AttendNet sign-in details (any previous password no longer works).`;
+    : `Here are your new AttendNet sign-in details.`;
+  const warn = `This password was issued at ${at} and REPLACES any earlier AttendNet email. If you have more than one of these emails, use this one — the older passwords no longer work.`;
   const signIn = loginUrl ? `\n\nSign in: ${loginUrl}` : '';
   const text =
     `Hi ${name || ''},\n\n${lead}\n\n` +
     `${idLabel}: ${loginId}\nPassword: ${password}${signIn}\n\n` +
-    `For your security, change this password from your dashboard after you sign in.\n` +
+    `${warn}\n\n` +
+    `Type the password exactly as shown (no spaces before or after).\n` +
+    `For your security, change it from your dashboard after you sign in.\n` +
     `If you didn't expect this, contact your administrator.`;
   const html = `
     <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:auto">
@@ -100,10 +117,46 @@ export async function sendCredentialsEmail({ to, name, idLabel, loginId, passwor
             <td style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;font-size:16px">${loginId}</td></tr>
         <tr><td style="padding:6px 14px 6px 0;color:#555">Password</td>
             <td style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;font-size:16px">${password}</td></tr>
+        <tr><td style="padding:6px 14px 6px 0;color:#555">Issued</td>
+            <td style="font-size:14px">${at}</td></tr>
       </table>
+      <p style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:8px;font-size:13px;margin:12px 0">
+        <strong>Use this email, not an older one.</strong> This password replaces any AttendNet
+        password emailed to you before ${at}. Earlier passwords no longer work.
+      </p>
       ${loginUrl ? `<p><a href="${loginUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Sign in</a></p>` : ''}
-      <p style="color:#666;font-size:13px">For your security, change this password from your dashboard after signing in.</p>
+      <p style="color:#666;font-size:13px">Type the password exactly as shown — no spaces before or after. Change it from your dashboard after signing in.</p>
       <p style="color:#999;font-size:12px">If you didn't expect this, contact your administrator.</p>
+    </div>`;
+  return sendEmail({ to, subject, html, text });
+}
+
+// Sent when someone asks for credentials again while a recently-issued password
+// is still live. We deliberately do NOT mint a new one — that would break the
+// email they already have — so this just points them back to it.
+export async function sendCredentialsReminderEmail({ to, name, idLabel, loginId, loginUrl, issuedAt }) {
+  const at = stamp(issuedAt);
+  const subject = 'Your AttendNet password was already sent';
+  const text =
+    `Hi ${name || ''},\n\n` +
+    `You asked for your sign-in details again, but we already emailed them at ${at} and that password is still valid.\n\n` +
+    `Please open that email (subject contains "${at}") and use the password in it. We did not create a new password, so the one you already have still works.\n\n` +
+    `${idLabel}: ${loginId}${loginUrl ? `\n\nSign in: ${loginUrl}` : ''}\n\n` +
+    `If you can't find that email, wait 10 minutes and request again to get a brand-new password.`;
+  const html = `
+    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif;max-width:520px;margin:auto">
+      <h2 style="margin:0 0 8px">AttendNet</h2>
+      <p>Hi ${name || ''},</p>
+      <p>You asked for your sign-in details again, but we already emailed them at
+         <strong>${at}</strong> and that password is <strong>still valid</strong>.</p>
+      <p style="background:#dbeafe;color:#1e40af;padding:10px 12px;border-radius:8px;font-size:13px">
+        We did <strong>not</strong> create a new password — the one already in your inbox still works.
+        Open the earlier email (its subject ends with <strong>${at}</strong>) and use that password.
+      </p>
+      <p style="margin:12px 0"><span style="color:#555">${idLabel}:</span>
+         <span style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;font-size:16px">${loginId}</span></p>
+      ${loginUrl ? `<p><a href="${loginUrl}" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Sign in</a></p>` : ''}
+      <p style="color:#666;font-size:13px">Can't find it? Wait 10 minutes and request again to get a brand-new password.</p>
     </div>`;
   return sendEmail({ to, subject, html, text });
 }

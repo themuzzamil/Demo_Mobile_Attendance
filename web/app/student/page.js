@@ -5,7 +5,7 @@ import DashboardLayout from '@/app/components/DashboardLayout';
 import Countdown from '@/app/components/Countdown';
 import StartingSoon from '@/app/components/StartingSoon';
 import AccountPanel from '@/app/components/AccountPanel';
-import { api, getPublicIp } from '@/lib/clientApi';
+import { api, getPublicIp, getDeviceId } from '@/lib/clientApi';
 import { useTab } from '@/lib/useTab';
 import { pktDayOfWeek, todayStartInstant } from '@/lib/pkt';
 
@@ -24,6 +24,7 @@ function StudentHome({ user }) {
   const [summary, setSummary] = useState([]);
   const [schedule, setSchedule] = useState([]);
   const [publicIp, setPublicIp] = useState(null);
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -48,20 +49,41 @@ function StudentHome({ user }) {
     return () => clearInterval(t);
   }, [loadSession, loadHistory, loadSummary, loadSchedule]);
 
-  async function markPresent() {
+  // token = the scanned QR token (from the camera link) or the 6-digit code typed
+  // from the teacher's screen. Both are validated server-side and expire in ~10s.
+  const markPresent = useCallback(async (token) => {
     setBusy(true); setError('');
     try {
       const ip = publicIp || (await getPublicIp());
       setPublicIp(ip);
-      const r = await api.post('/attendance/check-in', { network_ip: ip });
-      flash(r.late
-        ? 'Submitted after the window — waiting for your teacher to approve (counts as late).'
-        : 'Submitted — waiting for your teacher to approve your attendance.');
+      const r = await api.post('/attendance/check-in', {
+        network_ip: ip, token, device_id: getDeviceId(),
+      });
+      setCode('');
+      if (r.auto_approved) {
+        flash(r.late ? 'Verified — marked late (the window had closed).' : 'Verified — you are marked present.');
+      } else {
+        flash(`Submitted — your teacher needs to confirm this (${r.flags.join(', ')}).`);
+      }
       await loadSession(); await loadHistory(); await loadSummary();
     } catch (e) {
       fail(e); await loadSession();
     } finally { setBusy(false); }
-  }
+  }, [publicIp, loadSession, loadHistory, loadSummary]);
+
+  // Scanning the class QR with a phone camera opens /student?t=<token> — consume
+  // it once, then strip it from the URL so a refresh can't replay it.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const t = url.searchParams.get('t');
+    if (!t) return;
+    url.searchParams.delete('t');
+    window.history.replaceState({}, '', url.pathname + url.search);
+    setTab('mark');
+    markPresent(t);
+    // Run only for the token present on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // "acted" = the student has already submitted for this session (any status).
   const acted = alreadyMarked === 'present' || alreadyMarked === 'late' || alreadyMarked === 'pending';
@@ -112,21 +134,27 @@ function StudentHome({ user }) {
             <div className="alert info">No class is live right now. When your teacher starts a class, a <strong>Mark me present</strong> button appears here.</div>
           ))}
           {session && alreadyMarked === 'pending' && (
-            <div className="alert warn">Submitted for <strong>{session.subject}</strong> — waiting for your teacher to approve. You&apos;ll show as <strong>present</strong> once they confirm.</div>
+            <div className="alert warn">Submitted for <strong>{session.subject}</strong> — waiting for your teacher to confirm. You&apos;ll show as <strong>present</strong> once they do.</div>
           )}
           {session && (alreadyMarked === 'present' || alreadyMarked === 'late') && (
-            <div className="alert ok">Your teacher approved your attendance — you are marked <strong>{alreadyMarked}</strong> for <strong>{session.subject}</strong>.</div>
+            <div className="alert ok">You are marked <strong>{alreadyMarked}</strong> for <strong>{session.subject}</strong>.</div>
           )}
           {session && rejected && (
-            <div className="alert error">Your mark for <strong>{session.subject}</strong> was not approved. If you are in class, tap <strong>Mark me present</strong> again.</div>
+            <div className="alert error">Your mark for <strong>{session.subject}</strong> was not approved. If you are in class, scan the QR again.</div>
           )}
           {session && (!acted) && (
             <>
-              <div className="alert info">Live: <strong>{session.subject}</strong> by {session.teacher_name}. Tap below — your teacher then confirms you are present.</div>
-              {windowClosed && <div className="alert warn">The marking window has closed. You can still submit; it will be recorded as <strong>late</strong> pending your teacher&apos;s approval.</div>}
-              <div className="row wrap">
-                <button onClick={markPresent} disabled={busy} className="success">{busy ? 'Submitting…' : 'Mark me present'}</button>
-              </div>
+              <div className="alert info">Live: <strong>{session.subject}</strong> by {session.teacher_name}. Scan the QR on your teacher&apos;s screen with your camera, or type the 6-digit code shown next to it.</div>
+              {windowClosed && <div className="alert warn">The marking window has closed. You can still mark; it will be recorded as <strong>late</strong>.</div>}
+              <form className="row wrap" onSubmit={(e) => { e.preventDefault(); markPresent(code.trim()); }}>
+                <input className="code-input" inputMode="numeric" pattern="[0-9]*" maxLength={6}
+                       placeholder="000000" value={code}
+                       onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+                <button type="submit" disabled={busy || code.trim().length !== 6} className="success">
+                  {busy ? 'Checking…' : 'Mark me present'}
+                </button>
+              </form>
+              <p className="small muted">The code changes every 10 seconds — type the one on screen right now.</p>
             </>
           )}
         </div>

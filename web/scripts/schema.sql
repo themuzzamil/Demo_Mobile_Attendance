@@ -205,3 +205,27 @@ ALTER TABLE attendance ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
 ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check;
 ALTER TABLE attendance ADD CONSTRAINT attendance_status_check
   CHECK (status IN ('present', 'denied', 'late', 'absent', 'pending'));
+
+-- v8 — credential lifecycle. Every re-issue overwrites password_hash, so any
+-- earlier emailed password dies instantly. We record WHEN the live password was
+-- issued so (a) the email can be stamped with that time, letting the user tell
+-- which of several emails is current, and (b) request-access can refuse to
+-- regenerate during a cooldown instead of invalidating the mail they're reading.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS credentials_issued_at TIMESTAMPTZ;
+
+-- Login looks up `lower(email) = lower($1)`, which cannot use the plain UNIQUE
+-- index on email. This functional index makes that lookup indexable, and doubles
+-- as a guard against two accounts whose emails differ only by case (which would
+-- make the login lookup ambiguous).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email));
+
+-- v7 — rotating class QR + device binding.
+-- A student marks by scanning the QR on the teacher's screen (a signed token that
+-- rotates every 10s), and the mark must come from the device bound to their
+-- account. Together these defeat "photograph the QR and send it to a friend":
+-- the token dies in seconds, and a friend's phone is not the student's device.
+-- We store only a SHA-256 of the device id, never the raw value.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS device_hash TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS device_hash TEXT;
+-- Catches one phone marking several students in the same class.
+CREATE INDEX IF NOT EXISTS idx_attendance_session_device ON attendance(session_id, device_hash);

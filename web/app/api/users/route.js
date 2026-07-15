@@ -26,7 +26,8 @@ export async function GET(request) {
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const { rows } = await query(
       `SELECT id, role, name, email, status, subject, semester, section, roll_no, created_at,
-              (password_hash IS NOT NULL) AS has_password
+              (password_hash IS NOT NULL) AS has_password,
+              (device_hash IS NOT NULL) AS has_device
          FROM users ${clause} ORDER BY role, created_at`,
       values
     );

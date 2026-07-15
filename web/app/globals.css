@@ -332,6 +332,15 @@ button.success:hover { background: #166534; }
 .pct-badge.late { background: #fef3c7; color: #92400e; }
 .pct-badge.denied { background: #fee2e2; color: #991b1b; }
 
+/* Rotating class QR (teacher's screen) */
+.qr-panel { display: flex; gap: 1.1rem; align-items: flex-start; flex-wrap: wrap; margin-top: 0.75rem; }
+.qr-img { width: 168px; height: 168px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; padding: 6px; cursor: zoom-in; }
+.qr-img.big { width: min(420px, 80vw); height: auto; cursor: zoom-out; }
+.qr-side { flex: 1; min-width: 210px; }
+.qr-code { font-size: 2rem; font-weight: 750; letter-spacing: 0.22em; color: var(--ink); font-variant-numeric: tabular-nums; }
+/* Student's 6-digit entry box */
+.code-input { max-width: 220px; font-size: 1.35rem; letter-spacing: 0.3em; text-align: center; font-variant-numeric: tabular-nums; }
+
 @media (max-width: 900px) {
   .sidebar { position: fixed; left: 0; top: 0; z-index: 50; transform: translateX(-100%); transition: transform 0.25s ease; box-shadow: 0 24px 60px rgba(2, 6, 23, 0.55); }
   .sidebar.open { transform: translateX(0); }

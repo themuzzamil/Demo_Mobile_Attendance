@@ -46,6 +46,20 @@ export const api = {
   },
 };
 
+// A stable per-browser id, created once and kept in localStorage. The server
+// stores only a hash of it and binds it to the account on first attendance mark,
+// so a marking request has to come from the student's own device — which is what
+// makes a shared photo of the class QR useless to someone outside the room.
+export function getDeviceId() {
+  if (typeof window === 'undefined') return null;
+  let id = localStorage.getItem('device_id');
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now();
+    localStorage.setItem('device_id', id);
+  }
+  return id;
+}
+
 export function getStoredUser() {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem('user');

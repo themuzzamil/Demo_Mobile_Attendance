@@ -51,6 +51,24 @@ export default function ClassReports({ role, flash, fail, canDecide = true }) {
 
   const selected = classes.find((c) => String(c.offering_id) === String(selectedId));
 
+  // Roster export for the selected class. The server names the file; we pass a
+  // sensible fallback for browsers that ignore Content-Disposition.
+  async function download(fmt) {
+    const stem = selected ? `${selected.code}-${selected.section || 'all'}-roster` : 'class-roster';
+    try {
+      await api.download(`/reports/classes/${selectedId}/${fmt}`, `${stem}.${fmt}`);
+    } catch (e) { fail(e); }
+  }
+
+  async function downloadSession(fmt) {
+    const s = openSession?.session;
+    if (!s) return;
+    const day = new Date(s.opened_at).toISOString().slice(0, 10);
+    try {
+      await api.download(`/reports/session/${s.id}/${fmt}`, `${s.code || s.subject}-${day}.${fmt}`);
+    } catch (e) { fail(e); }
+  }
+
   return (
     <>
       <div className="card">
@@ -85,8 +103,14 @@ export default function ClassReports({ role, flash, fail, canDecide = true }) {
       {report && (
         <>
           <div className="card">
-            <h3>Enrolled students <span className="muted small">({report.enrolled_count})</span></h3>
-            <div className="table-wrap">
+            <div className="row between wrap">
+              <h3 style={{ margin: 0 }}>Enrolled students <span className="muted small">({report.enrolled_count})</span></h3>
+              <div className="row wrap">
+                <button className="secondary sm" onClick={() => download('csv')}>Download CSV</button>
+                <button className="secondary sm" onClick={() => download('pdf')}>Download PDF</button>
+              </div>
+            </div>
+            <div className="table-wrap mt">
               <table className="table">
                 <thead>
                   <tr><th>Roll / ID</th><th>Name</th><th>Sec</th><th>Present</th><th>Late</th><th>Absent</th><th>Pending</th><th>Attendance %</th></tr>
@@ -148,7 +172,7 @@ export default function ClassReports({ role, flash, fail, canDecide = true }) {
             {openSession && (
               <SessionDetail
                 data={openSession} busy={busy} canDecide={canDecide}
-                onDecide={decide}
+                onDecide={decide} onDownload={downloadSession}
               />
             )}
           </div>
@@ -163,7 +187,7 @@ const STATUS_LABEL = {
   denied: 'Rejected', pending: 'Pending', not_marked: 'Not marked',
 };
 
-function SessionDetail({ data, busy, canDecide, onDecide }) {
+function SessionDetail({ data, busy, canDecide, onDecide, onDownload }) {
   const { session, students } = data;
   const pendingCount = students.filter((s) => s.status === 'pending').length;
 
@@ -173,18 +197,22 @@ function SessionDetail({ data, busy, canDecide, onDecide }) {
         <strong className="small">
           {session.code ? <span className="mono">{session.code}</span> : session.subject} · {new Date(session.opened_at).toLocaleString()}
         </strong>
-        {canDecide && pendingCount > 0 && (
-          <div className="row wrap">
-            <button className="success sm" disabled={busy}
-              onClick={() => onDecide({ session_id: session.id, all: true, decision: 'approve' }, 'Approved all pending')}>
-              Approve all ({pendingCount})
-            </button>
-            <button className="ghost sm" disabled={busy}
-              onClick={() => onDecide({ session_id: session.id, all: true, decision: 'reject' }, 'Rejected all pending')}>
-              Reject all
-            </button>
-          </div>
-        )}
+        <div className="row wrap">
+          {canDecide && pendingCount > 0 && (
+            <>
+              <button className="success sm" disabled={busy}
+                onClick={() => onDecide({ session_id: session.id, all: true, decision: 'approve' }, 'Approved all pending')}>
+                Approve all ({pendingCount})
+              </button>
+              <button className="ghost sm" disabled={busy}
+                onClick={() => onDecide({ session_id: session.id, all: true, decision: 'reject' }, 'Rejected all pending')}>
+                Reject all
+              </button>
+            </>
+          )}
+          <button className="secondary sm" onClick={() => onDownload('csv')}>CSV</button>
+          <button className="secondary sm" onClick={() => onDownload('pdf')}>PDF</button>
+        </div>
       </div>
       <div className="table-wrap mt">
         <table className="table">
