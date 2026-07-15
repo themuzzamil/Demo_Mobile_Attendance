@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { requireApproved } from '@/lib/auth';
-import { effectiveIp, getServerSeenIp } from '@/lib/ip';
+import { trustedIp, getServerSeenIp } from '@/lib/ip';
 import { audit } from '@/lib/audit';
 import { teacherStartState, attendanceUntil } from '@/lib/schedule';
 
@@ -38,7 +38,10 @@ export async function POST(request) {
     return NextResponse.json({ error: 'This class is not assigned to you' }, { status: 403 });
   }
 
-  const networkIp = effectiveIp(b.network_ip, request);
+  // The captured reference network must be the IP the platform actually sees, not
+  // one the caller supplies — otherwise the whole class check could be pointed at
+  // an arbitrary network. network_ip is only a fallback for local dev.
+  const networkIp = trustedIp(request, b.network_ip);
   if (!networkIp) {
     return NextResponse.json(
       { error: 'Could not determine your network IP. Check your connection and retry.' },

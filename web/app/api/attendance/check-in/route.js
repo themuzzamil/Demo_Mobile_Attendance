@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { requireApproved } from '@/lib/auth';
-import { effectiveIp, getServerSeenIp, sameNetwork } from '@/lib/ip';
+import { trustedIp, getServerSeenIp, sameNetwork } from '@/lib/ip';
 import { verifyToken, verifyMessage, hashDevice } from '@/lib/qr';
 import { audit } from '@/lib/audit';
 
@@ -10,17 +10,19 @@ export const runtime = 'nodejs';
 // Student marks attendance for the open session of a course they're enrolled in.
 //
 // Proof of presence is layered, so no single copied artefact is enough:
-//   1. QR / code  — a signed token from the teacher's screen that rotates every
-//                   10s, so a photographed code is dead before it can be shared.
-//   2. Device     — the mark must come from the device bound to this account, and
-//                   one device may not mark two students in the same session.
-//   3. Network    — the public IP is compared with the teacher's (a soft signal).
+//   1. Network — the student's public IP MUST equal the class network IP. This is
+//                a hard gate: off-network is rejected outright, no row is written
+//                and no teacher can override it.
+//   2. QR/code — a signed token from the teacher's screen that rotates every 10s,
+//                so a photographed code is dead before it can be shared.
+//   3. Device  — the mark must come from the device bound to this account, and
+//                one device may not mark two students in the same session.
 //
-// Outcome is risk-based, so the teacher isn't approving all 40 students by hand:
-//   token OK + known device + IP match -> auto 'present' (or 'late' after window)
-//   anything soft failing             -> 'pending', flagged with why, for the
-//                                        teacher to confirm (the manual approval)
-//   one device marking a 2nd student  -> rejected outright (proxy attempt)
+// Outcomes:
+//   off-network / bad token          -> 403, nothing recorded
+//   one device marking a 2nd student -> 403 (proxy attempt)
+//   all pass + known device          -> 'present' (or 'late' after the window)
+//   all pass + unrecognised device   -> 'pending' for the teacher to confirm
 //
 // Body: { network_ip, token, device_id }
 export async function POST(request) {
@@ -28,7 +30,8 @@ export async function POST(request) {
   if (error) return NextResponse.json({ error }, { status });
 
   const b = (await request.json().catch(() => ({}))) || {};
-  const studentIp = effectiveIp(b.network_ip, request);
+  // network_ip is a dev-only fallback; in production the platform decides.
+  const studentIp = trustedIp(request, b.network_ip);
   const serverIp = getServerSeenIp(request);
   const deviceHash = hashDevice(b.device_id);
 
@@ -55,7 +58,23 @@ export async function POST(request) {
     );
   }
 
-  // 1. Rotating QR / code from the teacher's screen — required.
+  // 1. Class network — a hard gate. Checked before anything is written, so an
+  // off-network attempt leaves no attendance row for anyone to approve later.
+  const ipOk = sameNetwork(studentIp, session.network_ip);
+  if (!ipOk) {
+    await audit(request, user.id, 'attendance.check_in_rejected', {
+      sessionId: session.id, reason: 'off_network', studentIp,
+    });
+    return NextResponse.json(
+      {
+        error: 'You are not on the class network. Connect to the class Wi-Fi and try again.',
+        off_network: true,
+      },
+      { status: 403 }
+    );
+  }
+
+  // 2. Rotating QR / code from the teacher's screen — required.
   const v = verifyToken(b.token, session.id);
   if (!v.ok) {
     await audit(request, user.id, 'attendance.check_in_rejected', {
@@ -67,7 +86,7 @@ export async function POST(request) {
     );
   }
 
-  // 2a. Proxy guard: this device already marked a DIFFERENT student here.
+  // 3a. Proxy guard: this device already marked a DIFFERENT student here.
   const clash = await query(
     `SELECT u.name FROM attendance a JOIN users u ON u.id = a.student_id
       WHERE a.session_id = $1 AND a.device_hash = $2 AND a.student_id <> $3 LIMIT 1`,
@@ -83,7 +102,7 @@ export async function POST(request) {
     );
   }
 
-  // 2b. Device binding: first mark binds the account to this device; later marks
+  // 3b. Device binding: first mark binds the account to this device; later marks
   // from an unrecognised device are allowed but flagged for the teacher (a student
   // may genuinely have a new phone — an admin can reset the binding).
   const known = (await query('SELECT device_hash FROM users WHERE id = $1', [user.id])).rows[0]
@@ -95,23 +114,19 @@ export async function POST(request) {
     ]);
   }
 
-  // 3. Network signal.
   const now = new Date();
   const windowClosed = session.attendance_until && now > new Date(session.attendance_until);
-  const ipOk = sameNetwork(studentIp, session.network_ip);
 
-  // Risk-based outcome.
-  const flags = [];
-  if (!deviceOk) flags.push('unrecognised device');
-  if (!ipOk) flags.push('not on the class network');
-
-  const autoApproved = flags.length === 0;
+  // Network and token are already proven by the gates above, so an unrecognised
+  // device is the only thing left that still needs a human to look at.
+  const flags = deviceOk ? [] : ['unrecognised device'];
+  const autoApproved = deviceOk;
   const markStatus = autoApproved ? (windowClosed ? 'late' : 'present') : 'pending';
   const reason = autoApproved
     ? windowClosed
-      ? 'Verified by class QR — marked late (after the window).'
+      ? 'Verified by class QR, device and network — marked late (after the window).'
       : 'Verified by class QR, device and network.'
-    : `Needs teacher check — ${flags.join(' and ')}.`;
+    : 'Needs teacher check — marked from an unrecognised device.';
 
   // A teacher's earlier approval must never be silently downgraded by a re-tap.
   const { rows: saved } = await query(

@@ -20,6 +20,7 @@ function StudentHome({ user }) {
   const [session, setSession] = useState(null);
   const [alreadyMarked, setAlreadyMarked] = useState(null);
   const [windowClosed, setWindowClosed] = useState(false);
+  const [ipOk, setIpOk] = useState(false);
   const [history, setHistory] = useState([]);
   const [summary, setSummary] = useState([]);
   const [schedule, setSchedule] = useState([]);
@@ -34,8 +35,11 @@ function StudentHome({ user }) {
 
   const loadSession = useCallback(async () => {
     try {
-      const data = await api.get('/sessions/active');
-      setSession(data.session); setAlreadyMarked(data.alreadyMarked); setWindowClosed(!!data.window_closed);
+      // The IP is only a dev fallback — the server uses what the platform sees.
+      const ip = await getPublicIp();
+      const data = await api.get(`/sessions/active${ip ? `?network_ip=${encodeURIComponent(ip)}` : ''}`);
+      setSession(data.session); setAlreadyMarked(data.alreadyMarked);
+      setWindowClosed(!!data.window_closed); setIpOk(!!data.ip_ok);
     } catch (e) { fail(e); }
   }, []);
   const loadHistory = useCallback(async () => { try { setHistory((await api.get('/attendance/me')).attendance); } catch (e) { fail(e); } }, []);
@@ -142,7 +146,16 @@ function StudentHome({ user }) {
           {session && rejected && (
             <div className="alert error">Your mark for <strong>{session.subject}</strong> was not approved. If you are in class, scan the QR again.</div>
           )}
-          {session && (!acted) && (
+          {/* Off the class network: no marking option at all. The server enforces
+              this too — this just avoids offering an action that cannot succeed. */}
+          {session && !acted && !ipOk && (
+            <div className="alert error">
+              <strong>You are not on the class network.</strong> Attendance can only be marked from
+              the classroom Wi-Fi. Connect to it and this page will update automatically.
+              <div className="small mt">Your network: <span className="ip-pill">{publicIp || 'detecting…'}</span></div>
+            </div>
+          )}
+          {session && !acted && ipOk && (
             <>
               <div className="alert info">Live: <strong>{session.subject}</strong> by {session.teacher_name}. Scan the QR on your teacher&apos;s screen with your camera, or type the 6-digit code shown next to it.</div>
               {windowClosed && <div className="alert warn">The marking window has closed. You can still mark; it will be recorded as <strong>late</strong>.</div>}
